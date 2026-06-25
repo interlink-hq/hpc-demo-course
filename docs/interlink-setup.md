@@ -93,7 +93,7 @@ go version
 ```bash
 # Clone Interlink
 cd ~
-git clone https://github.com/interlink-project/interlink.git
+git clone https://github.com/interlink-hq/interlink.git
 cd interlink
 
 # Check available versions/branches
@@ -273,7 +273,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 ```bash
 # Clone or download VirtualKubelet
 cd ~
-git clone https://github.com/interlink-project/interlink.git
+git clone https://github.com/interlink-hq/interlink.git
 cd interlink
 
 # Build VirtualKubelet component

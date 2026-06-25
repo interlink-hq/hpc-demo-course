@@ -816,7 +816,7 @@ If issues persist:
 5. Try restarting the affected service
 
 For Interlink specific issues, check the official Interlink documentation:
-- https://github.com/interlink-project/interlink
+- https://github.com/interlink-hq/interlink
 
 For SLURM issues:
 - https://slurm.schedmd.com/
