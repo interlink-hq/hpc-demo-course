@@ -5,35 +5,53 @@
 
 ## Components Deployed
 
-### Machine 1 (192.168.2.170) - SLURM + Interlink API
+### Machine 1 (192.168.2.170) - SLURM + Interlink (API + Plugin)
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| Interlink API | ✅ Running | Binary: ~/interlink/interlink-api, Port: 3000, PID: 56644 |
-| Config | ✅ Ready | ~/interlink/interlink-config.yaml |
-| SLURM | ✅ Available | /opt/slurm/bin/sbatch, squeue, scancel |
-| Network | ✅ OK | Responding on port 3000 |
+| Interlink API | ✅ Running | Binary: ~/interlink/interlink-api, Port: 3000 |
+| SLURM Plugin | ✅ Running | Binary: ~/interlink/slurm-plugin, Port: 4000 |
+| API Config | ✅ Ready | ~/interlink/interlink-config.yaml |
+| Plugin Config | ✅ Ready | ~/interlink/SlurmConfig.yaml |
+| SLURM | ✅ Available | /home/rocky/slurm-demo/bin/{sbatch,squeue,scancel} |
+| Network | ✅ OK | API on port 3000, Plugin on port 4000 |
 
-**Start command:**
+**Start SLURM Plugin:**
+```bash
+export SLURMCONFIGPATH=~/interlink/SlurmConfig.yaml
+~/interlink/slurm-plugin
+```
+
+**Start Interlink API:**
 ```bash
 export INTERLINKCONFIGPATH=~/interlink/interlink-config.yaml
 ~/interlink/interlink-api
 ```
 
+**Important:** Start the plugin BEFORE the API to ensure the API can connect to it.
+
 ### Machine 2 (192.168.2.84) - k3s + VirtualKubelet
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| VirtualKubelet | ✅ Running | Binary: ~/interlink/virtual-kubelet, Node: interlink-node, PID: 46737 |
+| VirtualKubelet | ✅ Running | Binary: ~/vk, Node: interlink-node |
 | k3s | ✅ Running | v1.31.4+k3s1, Control Plane: Ready |
-| RBAC | ✅ Configured | ServiceAccount, ClusterRole, ClusterRoleBinding created |
-| kubeconfig | ✅ Ready | ~/interlink/vk-kubeconfig.yaml |
+| RBAC | ✅ Configured | ServiceAccount, ClusterRole, ClusterRoleBinding |
+| VK Config | ✅ Ready | ~/vk-config.yaml |
+| kubeconfig | ✅ Ready | /etc/rancher/k3s/k3s.yaml |
 
-**Start command:**
+**VK Configuration:**
+```yaml
+InterlinkURL: "http://192.168.2.170"
+InterlinkPort: "3000"
+VerboseLogging: true
+ErrorsOnlyLogging: false
+```
+
+**Start VirtualKubelet:**
 ```bash
-~/interlink/virtual-kubelet \
-  -configpath=./vk-config.yaml \
-  -nodename=interlink-node
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+~/vk -configpath=/home/rocky/vk-config.yaml -nodename=interlink-node
 ```
 
 ## Network Connectivity
@@ -89,26 +107,33 @@ See [Phase 4: Test Pod Offload](phase4-test-offload.md) for comprehensive testin
 
 | Component | Machine | Path |
 |-----------|---------|------|
-| Interlink API | 1 | ~/interlink/interlink-api |
-| VirtualKubelet | 2 | ~/interlink/virtual-kubelet |
+| Interlink API binary | 1 | ~/interlink/interlink-api |
+| SLURM Plugin binary | 1 | ~/interlink/slurm-plugin |
+| VirtualKubelet binary | 2 | ~/vk |
 | API Config | 1 | ~/interlink/interlink-config.yaml |
-| VK Config | 2 | ~/interlink/vk-config.yaml |
-| VK kubeconfig | 2 | ~/interlink/vk-kubeconfig.yaml |
-| k3s config | 2 | /etc/rancher/k3s/k3s.yaml |
+| Plugin Config | 1 | ~/interlink/SlurmConfig.yaml |
+| VK Config | 2 | ~/vk-config.yaml |
+| k3s kubeconfig | 2 | /etc/rancher/k3s/k3s.yaml |
+| API Logs | 1 | ~/interlink/api.log |
+| Plugin Logs | 1 | ~/interlink/plugin.log |
+| VK Logs | 2 | ~/vk.log |
 
 ## Log Files
 
 Monitor deployment and troubleshooting:
 
 ```bash
-# Interlink API logs
-ssh rocky@192.168.2.170 'tail -f ~/interlink/interlink-api.log'
+# Machine 1 Interlink API
+ssh rocky@192.168.2.170 'tail -f ~/interlink/api.log'
 
-# VirtualKubelet logs
-ssh rocky@192.168.2.84 'tail -f ~/interlink/vk.log'
+# Machine 1 SLURM Plugin
+ssh rocky@192.168.2.170 'tail -f ~/interlink/plugin.log'
 
-# k3s logs
-ssh rocky@192.168.2.84 'journalctl -u k3s -f'
+# Machine 2 VirtualKubelet
+ssh rocky@192.168.2.84 'tail -f ~/vk.log'
+
+# k3s API
+ssh rocky@192.168.2.84 'journalctl -u k3s -f' # if available
 ```
 
 ## Next Steps for Students
@@ -120,26 +145,47 @@ ssh rocky@192.168.2.84 'journalctl -u k3s -f'
 
 ## Troubleshooting
 
+### Issue: SSRF Detection Blocking Plugin Communication
+
+**Symptom:** Error messages like "potential SSRF detected"
+
+**Solution:** Ensure `interlink-config.yaml` uses machine IP, not localhost:
+```yaml
+SidecarURL: "http://192.168.2.170"  # NOT http://127.0.0.1
+SidecarPort: "4000"
+```
+
+### Issue: sbatch Not Found
+
+**Symptom:** Error "sh: line 1: /opt/slurm/bin/sbatch: No such file or directory"
+
+**Solution:** Check actual SLURM paths and update `SlurmConfig.yaml`:
+```bash
+which sbatch  # Find actual path
+# Update SlurmConfig.yaml with correct path
+```
+
 ### Issue: VirtualKubelet Not Connecting to Interlink API
 
 **Check:**
-- Is Interlink API running? `ps aux | grep interlink-api`
-- Is port 3000 open? `curl http://192.168.2.170:3000/`
-- VirtualKubelet logs: `ssh rocky@192.168.2.84 'tail -100 ~/interlink/vk.log'`
+- Is Interlink API running? `ssh rocky@192.168.2.170 'ps aux | grep interlink-api'`
+- Is SLURM plugin running? `ssh rocky@192.168.2.170 'ps aux | grep slurm-plugin'`
+- Can reach API? `ssh rocky@192.168.2.84 'curl http://192.168.2.170:3000/'`
+- VirtualKubelet logs: `ssh rocky@192.168.2.84 'tail -100 ~/vk.log'`
 
 ### Issue: Pod Stays in Pending
 
 **Check:**
 - Does `interlink-node` exist? `kubectl get nodes`
-- Is VirtualKubelet responding? `ps aux | grep virtual-kubelet`
+- Pod needs proper tolerations for `virtual-node.interlink/no-schedule` taint
 - Check pod events: `kubectl describe pod <name>`
 
 ### Issue: SLURM Job Not Created
 
 **Check:**
-- Is SLURM available? `ssh rocky@192.168.2.170 '/opt/slurm/bin/squeue'`
-- Interlink API logs for errors
-- VirtualKubelet logs for pod submission attempts
+- Are both API and plugin running? `ssh rocky@192.168.2.170 'ps aux | grep interlink'`
+- Check API logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/api.log | grep -i error'`
+- Check plugin logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/plugin.log | grep -i error'`
 
 ## Architecture Summary
 
