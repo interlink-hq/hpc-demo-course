@@ -14,7 +14,21 @@
 | API Config | ✅ Ready | ~/interlink/interlink-config.yaml |
 | Plugin Config | ✅ Ready | ~/interlink/SlurmConfig.yaml |
 | SLURM | ✅ Available | /home/rocky/slurm-demo/bin/{sbatch,squeue,scancel} |
+| Apptainer | ✅ Installed | Version: 1.5.1, Binary: /usr/bin/apptainer |
 | Network | ✅ OK | API on port 3000, Plugin on port 4000 |
+
+**Apptainer Configuration:**
+
+The SLURM plugin configuration includes:
+```yaml
+SingularityPrefix: "/usr/bin/apptainer"
+ImagePrefix: "docker://"
+```
+
+This allows the plugin to:
+- Execute container workloads from Kubernetes pods
+- Use Docker images via Apptainer's OCI support
+- Run offloaded pods on the SLURM compute node
 
 **Start SLURM Plugin:**
 ```bash

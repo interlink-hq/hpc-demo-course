@@ -59,26 +59,30 @@ ls -lh virtual-kubelet ssh-tunnel
 M2SETUP
 ```
 
-## Step 2: Configure Interlink API (Machine 1)
+## Step 2: Configure Interlink (Machine 1)
 
-Create configuration file:
+**IMPORTANT:** Before starting, ensure Apptainer is installed on Machine 1 (see Phase 1: Install Apptainer).
+
+Create configuration files:
 
 ```bash
 ssh rocky@192.168.2.170 << 'CONFIG'
 cd ~/interlink
 
+# Interlink API configuration
 cat > interlink-config.yaml <<'EOF'
 InterlinkAddress: "http://0.0.0.0"
 InterlinkPort: "3000"
-SidecarURL: "http://127.0.0.1"
+SidecarURL: "http://192.168.2.170"
 SidecarPort: "4000"
 VerboseLogging: true
 ErrorsOnlyLogging: false
 DataRootFolder: "/tmp/.interlink-api"
 EOF
 
-cat > plugin-config.yaml <<'EOF'
-InterlinkURL: "http://127.0.0.1"
+# SLURM Plugin configuration (note SingularityPrefix pointing to Apptainer)
+cat > SlurmConfig.yaml <<'EOF'
+InterlinkURL: "http://192.168.2.170"
 InterlinkPort: "3000"
 SidecarURL: "http://0.0.0.0"
 SidecarPort: "4000"
@@ -86,11 +90,11 @@ VerboseLogging: true
 ErrorsOnlyLogging: false
 DataRootFolder: "/tmp/.interlink/"
 ExportPodData: true
-SbatchPath: "/opt/slurm/bin/sbatch"
-ScancelPath: "/opt/slurm/bin/scancel"
-SqueuePath: "/opt/slurm/bin/squeue"
+SbatchPath: "/home/rocky/slurm-demo/bin/sbatch"
+ScancelPath: "/home/rocky/slurm-demo/bin/scancel"
+SqueuePath: "/home/rocky/slurm-demo/bin/squeue"
 CommandPrefix: ""
-SingularityPrefix: ""
+SingularityPrefix: "/usr/bin/apptainer"
 ImagePrefix: "docker://"
 Namespace: "default"
 Tsocks: false
@@ -102,6 +106,13 @@ echo "✓ Configs created"
 ls -la *.yaml
 CONFIG
 ```
+
+**Configuration Details:**
+
+- **SidecarURL**: Must be the machine IP (192.168.2.170), not localhost, to avoid SSRF detection
+- **SingularityPrefix**: Points to `/usr/bin/apptainer` (installed via `sudo dnf install apptainer`)
+- **SbatchPath/ScanelPath/SqueuePath**: Point to actual SLURM binary locations
+- The SLURM plugin uses Apptainer to execute container workloads from Kubernetes pods
 
 ## Step 3: Start Interlink API (Machine 1)
 
@@ -138,6 +149,44 @@ Expected output:
 HTTP/1.1 404 Not Found
 Content-Type: text/plain; charset=utf-8
 ...
+```
+
+## Step 3.5: Start SLURM Plugin (Machine 1)
+
+**Important:** The SLURM plugin must be started BEFORE the API. Start it like this:
+
+```bash
+ssh rocky@192.168.2.170 << 'START_PLUGIN'
+cd ~/interlink
+
+# Kill any previous instances
+pkill -f slurm-plugin || true
+sleep 2
+
+# Start SLURM plugin in background
+export SLURMCONFIGPATH=$(pwd)/SlurmConfig.yaml
+nohup ./slurm-plugin > slurm-plugin.log 2>&1 &
+
+sleep 3
+
+echo "=== SLURM Plugin Status ==="
+ps aux | grep -E '[s]lurm-plugin'
+echo ""
+echo "=== Plugin Logs ==="
+tail -10 slurm-plugin.log
+
+START_PLUGIN
+```
+
+**Verify both are running:**
+```bash
+ssh rocky@192.168.2.170 "ps aux | grep -E '[i]nterlink-api|[s]lurm-plugin' | grep -v grep"
+```
+
+Expected output:
+```
+rocky    77429  0.3  0.4 1810088 33728 ?  Sl  15:31   0:00 ./slurm-plugin
+rocky    77436  1.3  0.4 1303460 38648 ?  Sl  15:31   0:00 ./interlink-api
 ```
 
 ## Step 4: Configure VirtualKubelet (Machine 2)

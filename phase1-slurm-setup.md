@@ -107,4 +107,28 @@ sinfo
 
 ---
 
+## Install Apptainer (Required for Container Support)
+
+The Interlink SLURM plugin uses Apptainer (formerly Singularity) to run container workloads submitted from Kubernetes pods. This is **required** for the Interlink bridge to function.
+
+```bash
+# Install EPEL repository (if not already installed)
+sudo dnf install -y epel-release
+
+# Install Apptainer
+sudo dnf install -y apptainer
+
+# Verify installation
+apptainer --version
+apptainer run docker://busybox echo "Apptainer is working!"
+```
+
+**Important Notes:**
+- Apptainer must be available on the machine where the SLURM plugin runs
+- The plugin is configured with `SingularityPrefix: /usr/bin/apptainer` in the SlurmConfig.yaml
+- Without Apptainer, pod execution will fail when Interlink tries to create containers
+- Apptainer is compatible with OCI/Docker images, so existing container images will work
+
+---
+
 Next: [Phase 2: k3s Setup](phase2-k3s-setup.md)

@@ -3,6 +3,18 @@
 **Date:** June 25, 2026  
 **Status:** ✅ FULLY WORKING - Pod Offload Verified End-to-End
 
+## Critical Prerequisites
+
+For Interlink pod offload to work, ALL of these must be in place on Machine 1 (SLURM):
+
+1. **SLURM installation** with sbatch, squeue, scancel commands
+2. **Apptainer/Singularity** container runtime (`apptainer --version`)
+   - Install via: `sudo dnf install -y epel-release apptainer`
+   - CRITICAL: Without this, pod execution fails
+3. **Interlink binaries**: Interlink API + SLURM plugin
+4. **Correct network configuration**: IP-based not localhost
+5. **k3s with egress selector disabled** on Machine 2
+
 ## Overview
 
 The complete Interlink bridge from k3s to SLURM is now fully operational. Pods submitted to Kubernetes are successfully offloaded to SLURM and execute as jobs on the remote HPC cluster.
@@ -73,6 +85,17 @@ to http://192.168.2.170:4000/status" ...
 SbatchPath: /home/rocky/slurm-demo/bin/sbatch
 ScancelPath: /home/rocky/slurm-demo/bin/scancel
 SqueuePath: /home/rocky/slurm-demo/bin/squeue
+```
+
+### 4. Apptainer Container Runtime
+**Problem:** Pod execution failed with "singularity not found" errors
+**Root Cause:** SLURM plugin requires a container runtime (Apptainer/Singularity) to execute container workloads
+**Solution:** 
+- Installed Apptainer: `sudo dnf install -y epel-release apptainer`
+- Configured plugin with Apptainer path: `SingularityPrefix: /usr/bin/apptainer`
+- Plugin now successfully executes container workloads via Apptainer
+
+**Critical:** Without Apptainer, the SLURM plugin cannot execute pods as containers.
 ```
 
 **What this means:**
