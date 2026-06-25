@@ -1,245 +1,187 @@
-# Interlink HPC Course: SLURM ↔ Kubernetes Bridge
+# HPC + Kubernetes Course: SLURM ↔ k3s Interlink Bridge
 
-**Production-tested course** demonstrating pod offload from Kubernetes to SLURM HPC systems.
+**Objective:** Learn how to bridge HPC (SLURM) and Kubernetes (k3s) using Interlink.
 
-## Architecture
+This repository contains step-by-step instructions to deploy a complete Interlink setup bridging two systems:
 
-```
-Machine 2 (k3s)                          Machine 1 (SLURM)
-┌──────────────────────┐                 ┌────────────────┐
-│ Kubernetes Pods      │                 │ SLURM Jobs     │
-│ (nodeName:           │                 │                │
-│  virtual-kubelet)    │                 └────────┬───────┘
-└──────────┬───────────┘                          ▲
-           │                                      │
-           ▼                              (SSH submits jobs)
-    ┌──────────────────┐                         │
-    │ Pod Translator   │◄─────────────────────────┘
-    │ (Python daemon)  │
-    │ watches & submits│
-    │ jobs via SSH     │
-    └──────────────────┘
-```
+1. **Machine 1 (SLURM):** 192.168.2.170 - HPC job scheduler
+2. **Machine 2 (k3s):** 192.168.2.84 - Kubernetes cluster
 
-## What You Get
-
-✅ **Working SLURM Cluster** - HPC with job scheduling
-✅ **Working k3s Cluster** - Kubernetes on single node
-✅ **Pod Offload Mechanism** - Pods → SLURM jobs
-✅ **Practical Examples** - Actually executable code
-✅ **Real Testing Results** - Verified on hardware
+Kubernetes pods scheduled to the virtual node will be automatically offloaded to SLURM jobs.
 
 ## Quick Start
 
-### Phase 1: Setup SLURM (Machine 1)
-```bash
-ssh rocky@192.168.2.170
-# Install SLURM from source or use existing
-sinfo  # Verify it works
+Follow these phases in order:
+
+1. **[Phase 1: SLURM Setup](phase1-slurm-setup.md)** - Deploy SLURM on Machine 1
+2. **[Phase 2: k3s Setup](phase2-k3s-setup.md)** - Deploy k3s on Machine 2  
+3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Deploy Interlink bridge using binaries
+4. **[Phase 4: Test Pod Offload](phase4-test-offload.md)** - Verify pods offload to SLURM
+
+Estimated time: **30-45 minutes** per phase.
+
+## Architecture Overview
+
+```
+k3s (Machine 2)                          Interlink Bridge                 SLURM (Machine 1)
+───────────────────                      ────────────────                 ──────────────────
+Pod submitted                                                              
+   │                                                                       
+   ▼                                                                       
+Virtual Node "interlink-node"                                             
+   │ (watches for pods)                                                   
+   │                                                                       
+   ├─► VirtualKubelet Binary (192.168.2.84)                              
+   │       │                                                              
+   │       │ gRPC (HTTP/2)                                               
+   │       │                                                              
+   │       └──────────────────────────────► Interlink API (port 3000)    
+   │                                              │                       
+   │                                              │ gRPC                  
+   │                                              │                       
+   │                                              ▼                       
+   │                                        SLURM Plugin                  
+   │                                              │                       
+   │                                              │ sbatch/squeue/scancel
+   │                                              │                       
+   │                                              ▼                       
+   │                                        SLURM Daemon                  
+   │                                              │                       
+   │ ◄──────────────────────────────────────────┘ (status updates)      
+   │                                                                       
+Pod status updated (Running/Completed)                                    
 ```
 
-### Phase 2: Setup k3s (Machine 2)
+## What Gets Deployed
+
+| Component | Machine | Type | Port | Role |
+|-----------|---------|------|------|------|
+| VirtualKubelet | 2 | Binary | - | Watches k8s pods, submits to Interlink |
+| Interlink API | 1 | Binary | 3000 | Translates pods to SLURM jobs |
+| SLURM | 1 | Service | - | Schedules and executes jobs |
+| k3s | 2 | Service | 6443 | Kubernetes control plane |
+
+## Network Requirements
+
+- **Connectivity:** Machine 2 must reach Machine 1 on port 3000
+- **SSH Keys:** Key-based SSH between machines (for remote commands)
+- **Subnet:** 192.168.2.0/24 (adjust if different)
+
+Test connectivity before starting:
 ```bash
-ssh rocky@192.168.2.84
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.31.4+k3s1 sh -s - --disable=traefik
+ping 192.168.2.170          # From Machine 2
+ping 192.168.2.84           # From Machine 1
+curl http://192.168.2.170:3000/  # From Machine 2 (after Phase 3)
+```
+
+## Expected Workflow
+
+1. Submit pod to k3s pointing to `interlink-node`
+2. Pod status changes to Running
+3. VirtualKubelet detects pod, sends spec to Interlink API
+4. Interlink translates to SLURM job and submits via sbatch
+5. Job appears in SLURM queue (`squeue`)
+6. Pod status reflects job execution
+7. Job completes, pod marked as Completed
+8. Logs available via `kubectl logs`
+
+## Key Concepts
+
+### VirtualKubelet
+- Kubernetes node implementation that schedules pods to external systems
+- Watches k3s API for pods on "interlink-node"
+- Translates pod specs and submits to Interlink
+
+### Interlink API  
+- Bridge service translating Kubernetes concepts to HPC concepts
+- Pod spec → SLURM job script
+- Pod status → SLURM job status
+- Uses gRPC for communication
+
+### SLURM Plugin
+- Submits jobs to SLURM via sbatch
+- Monitors job status via squeue
+- Reports back to Interlink API
+
+## Testing Your Setup
+
+After Phase 3, test with:
+
+```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-kubectl get nodes  # Verify it works
-```
 
-### Phase 3: Deploy Pod Translator (Machine 2)
-```bash
-# Copy translator to Machine 2
-cp pod-translator.py .
-
-# Setup SSH key auth to Machine 1 first
-ssh-copy-id rocky@192.168.2.170
-
-# Run translator
-python3 pod-translator.py --machine1=192.168.2.170
-```
-
-### Phase 4: Test Pod Offload (Machine 2)
-```bash
-# Submit pod that offloads to SLURM
-kubectl apply -f - <<'EOF'
+# Submit test pod
+/usr/local/bin/k3s kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
-  name: slurm-job-1
-  namespace: default
+  name: hello-slurm
 spec:
-  nodeName: virtual-kubelet
+  nodeName: interlink-node
   containers:
-  - name: hello
-    image: busybox:latest
+  - name: app
+    image: busybox
     command: ["echo", "Hello from SLURM!"]
   restartPolicy: Never
 EOF
 
-# Check pod status
-kubectl get pod slurm-job-1
+# Watch pod status
+/usr/local/bin/k3s kubectl get pod hello-slurm -w
 
-# Check SLURM on Machine 1
-ssh rocky@192.168.2.170 squeue
+# Check logs
+/usr/local/bin/k3s kubectl logs hello-slurm
 ```
 
-## Documentation
+See [Phase 4](phase4-test-offload.md) for detailed testing procedures.
 
-| Phase | File | Topic |
-|-------|------|-------|
-| 1 | [phase1-slurm-setup.md](phase1-slurm-setup.md) | SLURM installation & config |
-| 2 | [phase2-k3s-setup.md](phase2-k3s-setup.md) | k3s & build tools |
-| 3 | [phase3-interlink-setup.md](phase3-interlink-setup.md) | Interlink architecture (reference) |
-| 4 | [phase4-simplified-offload.md](phase4-simplified-offload.md) | Pod offload deployment |
-| Ref | [SIMPLIFIED-OFFLOAD.md](SIMPLIFIED-OFFLOAD.md) | Architecture overview |
-| Ref | [IMPLEMENTATION-REALITY.md](IMPLEMENTATION-REALITY.md) | What works, what doesn't |
-| Ref | [pod-translator.py](pod-translator.py) | Pod→SLURM translator code |
+## Troubleshooting Quick Reference
 
-## How Pod Offload Works
+### Pod stuck in Pending
+1. Verify `interlink-node` exists: `kubectl get nodes`
+2. Check VirtualKubelet running: `ssh rocky@192.168.2.84 'ps aux | grep virtual-kubelet'`
+3. Check logs: `ssh rocky@192.168.2.84 'tail -50 ~/interlink/vk.log'`
 
-1. **User submits pod** with `nodeName: virtual-kubelet`
-   ```yaml
-   spec:
-     nodeName: virtual-kubelet
-     containers:
-     - image: busybox
-       command: ["./my-job.sh"]
-   ```
+### Interlink API not responding
+1. Check if running: `ssh rocky@192.168.2.170 'ps aux | grep interlink-api'`
+2. Check port: `ssh rocky@192.168.2.170 'netstat -tlnp | grep 3000'`
+3. Check logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/interlink-api.log'`
 
-2. **Translator detects pending pod** - watches Kubernetes API
-
-3. **Translator translates spec to sbatch script**
-   ```bash
-   #!/bin/bash
-   #SBATCH --job-name=default-myjob
-   #SBATCH --time=00:30:00
-   ./my-job.sh
-   ```
-
-4. **Translator submits to SLURM** via SSH
-   ```bash
-   ssh rocky@192.168.2.170 sbatch < script.sh
-   ```
-
-5. **SLURM executes job** and stores results
-
-6. **Pod shows Completed** in Kubernetes
-
-## Key Features
-
-- **No Docker required** - Uses pre-built binaries
-- **Single command to deploy** - Python translator
-- **SSH-based submission** - Works with existing SLURM setup
-- **Real job execution** - Actually runs on SLURM
-- **Simple to understand** - ~200 lines of Python
-- **Easy to extend** - Modify translator for custom logic
-
-## Files
-
-```
-├── README.md                          (this file)
-├── pod-translator.py                  (the magic ✨)
-├── phase1-slurm-setup.md             (SLURM installation)
-├── phase2-k3s-setup.md               (k3s installation)
-├── phase3-interlink-setup.md         (reference architecture)
-├── phase4-simplified-offload.md      (deployment guide)
-├── SIMPLIFIED-OFFLOAD.md             (architecture)
-└── IMPLEMENTATION-REALITY.md         (lessons learned)
+### Network issues between machines
+```bash
+ssh rocky@192.168.2.170 'ping 192.168.2.84'
+ssh rocky@192.168.2.84 'curl -v http://192.168.2.170:3000/' 2>&1 | head -20
 ```
 
-## What Makes This Different
+## Learning Objectives
 
-| Feature | Real Interlink | This Course |
-|---------|---|---|
-| Pod offload | ✅ | ✅ |
-| Docker images | ✅ | ❌ |
-| Build from source | ✅ | ❌ |
-| Complex setup | ✅ | ❌ |
-| Time to deploy | 2-3 hours | 15 minutes |
-| Learning curve | Steep | Gentle |
-| Understandable | Hard | Easy |
-| Actually works | ✅ | ✅ |
-| Educational | Medium | High |
+By completing this course, you'll understand:
 
-## Testing Results
+✓ How HPC systems (SLURM) differ from container orchestration (Kubernetes)  
+✓ How to implement a translation layer (Interlink) between systems  
+✓ How pod abstractions map to job abstractions  
+✓ How to debug cross-system workflows  
+✓ How to monitor and verify Kubernetes workloads on HPC infrastructure  
+✓ Real-world patterns for hybrid HPC+cloud deployments  
 
-Verified on actual hardware:
-- Machine 1 (192.168.2.170): SLURM fully operational
-- Machine 2 (192.168.2.84): k3s v1.35.5+k3s1 operational
-- Network: 0% packet loss, <2ms latency
-- Pod offload: Functional end-to-end ✅
+## File Structure
 
-## Next Steps
+```
+hpc-course/
+├── README.md                        # This file
+├── phase1-slurm-setup.md           # SLURM cluster deployment
+├── phase2-k3s-setup.md             # k3s deployment
+├── phase3-interlink-setup.md       # Interlink bridge (binary-based)
+├── phase4-test-offload.md          # Testing and validation
+└── configs/                        # Configuration examples
+```
 
-### For Students
-1. Follow phases 1-4
-2. Submit test pods
-3. Monitor SLURM execution
-4. Extend translator for your use cases
+## References
 
-### For Instructors
-1. Deploy on your hardware
-2. Show students live pod→SLURM offload
-3. Have them modify translator
-4. Discuss HPC + Kubernetes integration
-
-### Potential Extensions
-- Resource limit mapping (pod CPU → SLURM ntasks)
-- Output capture from SLURM → pod logs
-- Status sync back to pod events
-- Multi-container pod support
-- Custom SLURM parameters
-
-## Support
-
-If pod offload doesn't work:
-
-1. **Check translator is running**
-   ```bash
-   ps aux | grep pod-translator
-   ```
-
-2. **Check logs**
-   ```bash
-   tail -50 translator.log
-   ```
-
-3. **Verify SSH to Machine 1 works**
-   ```bash
-   ssh rocky@192.168.2.170 squeue
-   ```
-
-4. **Check pod is scheduled to virtual-kubelet**
-   ```bash
-   kubectl get pod -o wide
-   # Should show NODE: virtual-kubelet
-   ```
-
-5. **Check SLURM on Machine 1**
-   ```bash
-   ssh rocky@192.168.2.170
-   squeue
-   sacct
-   ```
-
-## Why This Approach?
-
-Full Interlink is powerful but:
-- Requires Docker
-- Complex build process
-- Many interdependent parts
-- Not ideal for learning
-
-This simplified translator:
-- **Actually works** end-to-end
-- **Simple** to understand (Python)
-- **Fast** to deploy (5 minutes)
-- **Educational** (shows the concept)
-- **Real** (jobs execute on actual SLURM)
-
-Perfect for a sysadmin course!
+- **Interlink:** https://github.com/interlink-hq/interlink
+- **SLURM:** https://slurm.schedmd.com/
+- **k3s:** https://docs.k3s.io/
+- **Kubernetes:** https://kubernetes.io/docs/
 
 ---
 
-**Ready to bridge HPC and Kubernetes?** Start with [Phase 1](phase1-slurm-setup.md)! 🚀
-
+**Ready to start?** Begin with [Phase 1: SLURM Setup](phase1-slurm-setup.md)
