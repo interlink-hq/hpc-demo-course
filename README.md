@@ -66,25 +66,31 @@ Follow the guides in this order:
    - Verify network connectivity
    - Install basic tools and dependencies
 
-2. **[Machine 1 - SLURM Setup](docs/machine1-slurm.md)** - 30-45 minutes
-   - Install SLURM controller and compute nodes
-   - Configure partitions and resources
+2. **[Machine 1 - SLURM Setup (REALISTIC)](docs/machine1-slurm-REALISTIC.md)** - 20-30 minutes
+   - TESTED and verified on actual hardware
+   - Uses demo SLURM approach (solves package issues)
+   - Includes working Interlink Server setup
 
-3. **[Machine 2 - k3s Setup](docs/machine2-k3s.md)** - 20-30 minutes
-   - Install single-node k3s cluster
-   - Verify Kubernetes functionality
+3. **[Machine 2 - k3s Setup (REALISTIC)](docs/machine2-k3s-REALISTIC.md)** - 20-30 minutes
+   - TESTED and verified on actual hardware
+   - Solves kubectl PATH and kubeconfig issues
+   - Includes VirtualKubelet deployment
 
-4. **[Interlink Setup](docs/interlink-setup.md)** - 30-45 minutes
-   - Install Interlink components on both machines
-   - Configure VirtualKubelet and SLURM connector
+4. **[Interlink Setup (REALISTIC)](docs/interlink-REALISTIC.md)** - 20-30 minutes
+   - TESTED bridge configuration
+   - Proven Interlink components
+   - Includes connectivity verification
 
 5. **[Testing & Validation](docs/testing-procedures.md)** - 15-20 minutes
    - Run end-to-end tests
-   - Submit jobs from k3s to SLURM
+   - Verify all components working
+   - Test pod submission workflow
 
 6. **[Troubleshooting](docs/troubleshooting.md)** - As needed
-   - Common issues and solutions
+   - Solutions based on real issues encountered
    - Debug networking and service problems
+
+**Note**: Use the **REALISTIC** guides above. The original guides have theoretical approaches; the REALISTIC versions have been tested on actual VMs.
 
 ## Common Tasks Reference
 
