@@ -36,9 +36,24 @@ export INTERLINKCONFIGPATH=~/interlink/interlink-config.yaml
 |-----------|--------|---------|
 | VirtualKubelet | ✅ Running | Binary: ~/vk, Node: interlink-node |
 | k3s | ✅ Running | v1.31.4+k3s1, Control Plane: Ready |
+| Egress Policies | ✅ Disabled | Flag: --egress-selector-mode=disabled |
 | RBAC | ✅ Configured | ServiceAccount, ClusterRole, ClusterRoleBinding |
 | VK Config | ✅ Ready | ~/vk-config.yaml |
 | kubeconfig | ✅ Ready | /etc/rancher/k3s/k3s.yaml |
+
+**k3s Egress Policy Configuration:**
+
+The `--egress-selector-mode=disabled` flag in k3s startup is **required** for Interlink to work properly:
+
+- **Why**: Offloaded pods need to retrieve logs from the SLURM backend
+- **Without it**: kubectl logs fails with TLS errors despite pods running successfully
+- **Status**: Already configured in systemd service file
+
+Verify it's enabled:
+```bash
+systemctl cat k3s | grep egress-selector-mode
+# Output should show: '--egress-selector-mode=disabled'
+```
 
 **VK Configuration:**
 ```yaml
@@ -197,7 +212,7 @@ Kubernetes Pod                    VirtualKubelet              Interlink API     
 │                                      │                               │                  |
 │                                      ├─► Watch event received        │                  |
 │                                      │                               │                  |
-│                                      ├─► Pod spec → gRPC call        │                  |
+│                                      ├─► Pod spec → REST call         │                  |
 │                                      │                               ├─► Parse spec     │
 │                                      │                               ├─► Create job     │
 │                                      │                               ├─► Submit sbatch  │

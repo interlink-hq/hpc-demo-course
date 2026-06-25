@@ -76,7 +76,7 @@ SqueuePath: /home/rocky/slurm-demo/bin/squeue
 ```
 
 **What this means:**
-1. VirtualKubelet sends gRPC request to Interlink API
+1. VirtualKubelet sends REST request to Interlink API
 2. Interlink API responds with HTTP 503 (Service Unavailable)
 3. VirtualKubelet can't parse the response (expects JSON, gets something else)
 4. Pod execution fails
@@ -92,9 +92,9 @@ The v0.6.1-patch1 Interlink API binary was downloaded from GitHub releases, but:
 The Interlink architecture requires:
 ```
 VirtualKubelet (M2)
-    ↓ (gRPC)
+    ↓ (REST/HTTP)
 Interlink API (M1) 
-    ↓ (gRPC)
+    ↓ (REST/HTTP)
 SLURM Plugin/Sidecar (M1)
     ↓
 SLURM Commands (sbatch, squeue)
@@ -115,7 +115,7 @@ We only have parts 1 and 2. Parts 3-4 are missing or misconfigured.
 - Build VirtualKubelet binary
 - Build Interlink API binary
 - Build SLURM plugin binary
-- Configure gRPC communication
+- Configure REST/HTTP communication
 - Time: 1-2 hours, dependencies
 - Status: Started but interrupted
 
@@ -161,7 +161,7 @@ The plugin is bundled in the source code repository, not released as standalone 
 1. User: kubectl apply pod-manifest.yaml
 2. Scheduler: Routes to interlink-node
 3. VirtualKubelet: Receives pod event
-4. VirtualKubelet: Sends pod spec to Interlink API (gRPC)
+4. VirtualKubelet: Sends pod spec to Interlink API (REST/HTTP)
 5. Interlink API: Receives request, passes to SLURM plugin
 6. SLURM Plugin: Converts pod spec to sbatch script
 7. SLURM Plugin: Submits to SLURM via sbatch
@@ -178,7 +178,7 @@ The plugin is bundled in the source code repository, not released as standalone 
 1. User: kubectl apply pod-manifest.yaml ✓
 2. Scheduler: Routes to interlink-node ✓
 3. VirtualKubelet: Receives pod event ✓
-4. VirtualKubelet: Sends pod spec to Interlink API (gRPC) ✓
+4. VirtualKubelet: Sends pod spec to Interlink API (REST/HTTP) ✓
 5. Interlink API: Receives request ✓
 6. Interlink API: Tries to call SLURM plugin... ✗ FAILS (503)
 7. Interlink API: Returns error response ✗
@@ -201,7 +201,7 @@ To make this truly work, we need:
 2. **OR**: Switch to Docker-based deployment
    - Use official Docker images
    - Pre-configured and tested
-   - Known to work with gRPC communication
+   - Known to work with REST/HTTP communication
 
 3. **OR**: Use real Interlink documentation
    - Follow official e2e test setup
@@ -212,7 +212,7 @@ To make this truly work, we need:
 
 - Downloaded binaries alone ≠ working system
 - Component communication must be configured
-- gRPC endpoints must be reachable and properly configured
+- REST/HTTP endpoints must be reachable and properly configured
 - Pre-built binaries without plugins don't do anything
 
 This is what happens when you skip the "build from source" phase and just download binaries. They're pieces of a larger system that need integration.

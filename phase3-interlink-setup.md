@@ -8,7 +8,7 @@ Deploy real Interlink binaries to bridge SLURM (Machine 1) and k3s (Machine 2).
 Machine 1 (192.168.2.170)              Machine 2 (192.168.2.84)
 ─────────────────────────              ──────────────────────
 Interlink API (port 3000)              VirtualKubelet Binary
-└─ gRPC endpoint                        └─ Connects to Interlink API
+└─ REST/HTTP endpoint                  └─ Connects to Interlink API
 SLURM (local)                          k3s Kubernetes
 └─ sbatch, squeue, scancel             └─ Watches for pods on "interlink-node"
 ```

@@ -33,11 +33,11 @@ Virtual Node "interlink-node"
    │                                                                       
    ├─► VirtualKubelet Binary (192.168.2.84)                              
    │       │                                                              
-   │       │ gRPC (HTTP/2)                                               
+   │       │ REST/HTTP                                                  
    │       │                                                              
    │       └──────────────────────────────► Interlink API (port 3000)    
    │                                              │                       
-   │                                              │ gRPC                  
+   │                                              │ REST/HTTP             
    │                                              │                       
    │                                              ▼                       
    │                                        SLURM Plugin                  
@@ -96,7 +96,7 @@ curl http://192.168.2.170:3000/  # From Machine 2 (after Phase 3)
 - Bridge service translating Kubernetes concepts to HPC concepts
 - Pod spec → SLURM job script
 - Pod status → SLURM job status
-- Uses gRPC for communication
+- Uses REST/HTTP for communication between components
 
 ### SLURM Plugin
 - Submits jobs to SLURM via sbatch
