@@ -548,3 +548,10 @@ spec:
 - ⚠️ Projected volumes: Not exported to SLURM (use `automountServiceAccountToken: false`)
 
 **All steps tested and verified on production hardware.**
+
+## Additional Resources
+
+- **[Phase 4: Testing Pod Offload](phase4-test-offload.md)** - Additional testing procedures and monitoring techniques
+- **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Detailed explanation of known limitation
+- **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive into all issues encountered
+- **[README.md](README.md)** - Architecture overview and quick reference
