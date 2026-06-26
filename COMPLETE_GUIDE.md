@@ -199,9 +199,9 @@ Expected output:
 
 ## Step 5: Deploy VirtualKubelet via Helm (Machine 2)
 
-**Deploy VirtualKubelet using the official Helm chart from OCI GitHub registry. RBAC is automatically handled by Helm.**
+**Deploy VirtualKubelet using the official Helm chart from OCI GitHub registry with Interlink configuration as Helm values.**
 
-### 5.1: Deploy VirtualKubelet via Helm from OCI Registry
+### 5.1: Deploy VirtualKubelet via Helm with Interlink Configuration
 
 ```bash
 ssh rocky@192.168.2.84 << 'HELM_DEPLOY'
@@ -217,9 +217,11 @@ helm upgrade --install vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
   --set nodeName=interlink-node \
   --set provider=interlink \
   --set logs.level=info \
+  --set interlink.url=http://192.168.2.170 \
+  --set interlink.port=3000 \
   --wait
 
-echo "✓ VirtualKubelet deployed via Helm (RBAC automatically configured)"
+echo "✓ VirtualKubelet deployed via Helm with Interlink configuration"
 
 echo ""
 echo "=== Verification ==="
@@ -232,35 +234,6 @@ Expected output:
 ```
 NAME                                         READY   STATUS    RESTARTS   AGE
 vk-virtual-kubelet-XXXXXXXXXX-XXXXX         1/1     Running   0          5s
-```
-
-### 5.2: Create ConfigMap for Interlink Configuration
-
-```bash
-ssh rocky@192.168.2.84 << 'CONFIGMAP'
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-echo "=== Creating Interlink configuration ConfigMap ==="
-kubectl create configmap vk-config \
-  -n virtual-kubelet \
-  --from-literal=InterlinkURL=http://192.168.2.170 \
-  --from-literal=InterlinkPort=3000 \
-  --from-literal=VerboseLogging=true \
-  || kubectl patch configmap vk-config -n virtual-kubelet \
-     -p "$(cat <<'EOF'
-{
-  "data": {
-    "InterlinkURL": "http://192.168.2.170",
-    "InterlinkPort": "3000",
-    "VerboseLogging": "true"
-  }
-}
-EOF
-)"
-
-echo "✓ ConfigMap created"
-
-CONFIGMAP
 ```
 
 ## Step 6: Verify VirtualKubelet Helm Deployment (Machine 2)
@@ -277,8 +250,8 @@ echo "=== Checking VirtualKubelet Pod ==="
 kubectl get pods -n virtual-kubelet -o wide
 
 echo ""
-echo "=== VirtualKubelet Logs ==="
-kubectl logs -n virtual-kubelet -l app=virtual-kubelet --tail=30
+echo "=== VirtualKubelet Logs (check Interlink connection) ==="
+kubectl logs -n virtual-kubelet -l app=virtual-kubelet --tail=30 | grep -i interlink
 
 echo ""
 echo "=== Checking Virtual Node Registration ==="
@@ -291,9 +264,8 @@ echo "=== All Nodes ==="
 kubectl get nodes
 
 echo ""
-echo "=== RBAC (automatically configured by Helm) ==="
-kubectl get serviceaccount -n virtual-kubelet
-kubectl get clusterrole,clusterrolebinding | grep virtual-kubelet
+echo "=== Helm Values (Interlink configuration) ==="
+helm get values vk -n virtual-kubelet
 
 VERIFY_VK
 ```
@@ -302,7 +274,7 @@ Expected output:
 ```
 ✓ VirtualKubelet pod running in virtual-kubelet namespace
 ✓ Virtual node "interlink-node" appears in node list with Ready status
-✓ ServiceAccount and ClusterRole/ClusterRoleBinding automatically created by Helm
+✓ Interlink configuration passed via Helm values
 ```
 
 ## Step 7: Test Pod Offload
