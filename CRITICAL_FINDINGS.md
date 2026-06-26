@@ -22,11 +22,12 @@ For Interlink pod offload to work, ALL of these must be in place:
 
 **On Machine 2 (k3s):**
 5. **k3s with egress selector disabled** (install with `--egress-selector-mode=disabled`)
-6. **VirtualKubelet** (deployed via official Helm chart)
+6. **VirtualKubelet** (deployed via official Helm chart from OCI registry)
    - VirtualKubelet runs as Kubernetes Pod via Helm deployment
-   - Installed from: https://virtual-kubelet.github.io/virtual-kubelet
+   - Installed from: `oci://ghcr.io/virtual-kubelet/virtual-kubelet`
    - Recommended approach for production Kubernetes deployments
    - Helm handles pod lifecycle, updates, and scaling
+   - RBAC automatically configured by Helm chart
 
 ## Overview
 
