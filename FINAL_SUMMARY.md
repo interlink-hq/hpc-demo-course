@@ -164,29 +164,29 @@ See **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** for detailed ex
 - IP: 192.168.2.84
 - OS: Rocky Linux 9
 - k3s: v1.31.4+k3s1
-- VirtualKubelet: **Binary deployment** (not Helm - see below)
+- VirtualKubelet: **Helm deployment** (official standard)
 - Egress policies: Disabled (`--egress-selector-mode=disabled`)
 
 ### VirtualKubelet Deployment Method
 
-**Why Binary, Not Helm?**
+**Why Helm?**
 
-Initially attempted a Helm chart approach for VirtualKubelet deployment (see git history commits fad4557, 0f8f8d3). However:
+VirtualKubelet is deployed via the official Helm chart from the virtual-kubelet project for these reasons:
 
-1. **Pod log retrieval failure**: VirtualKubelet's HTTPS server requires properly configured TLS certificates
-2. **Certificate generation issues**: RBAC permissions for CSR (CertificateSigningRequest) were insufficient
-3. **No functional difference**: Both Helm and binary deployments use the same underlying binary
-4. **Simpler approach**: Direct binary deployment avoids TLS certificate complexity
-5. **Same result**: Pods execute identically whether VirtualKubelet runs via Helm or binary
+1. **Standard approach**: Helm is the recommended deployment method for VirtualKubelet in Kubernetes
+2. **Lifecycle management**: Helm handles pod creation, updates, and scaling
+3. **RBAC integration**: Helm chart properly sets up ServiceAccounts and ClusterRoleBindings
+4. **Production-ready**: Tested and supported by the VirtualKubelet community
+5. **Kubernetes-native**: VirtualKubelet should run as a Kubernetes Pod, not outside the cluster
 
 **Current Implementation:**
-- VirtualKubelet runs as a simple binary process: `./vk -nodename=interlink-node -configpath=$(pwd)/vk-config.yaml`
-- No Kubernetes resources created (no Pod, Deployment, Service)
-- Direct access to kubeconfig for cluster communication
-- Fully functional pod offload pipeline
-- Pod log retrieval limitation is inherent to VirtualKubelet architecture, not deployment method
+- VirtualKubelet deployed via Helm: `helm install vk virtual-kubelet/virtual-kubelet --namespace virtual-kubelet`
+- VirtualKubelet runs as a Kubernetes Pod with proper RBAC
+- Integrated with k3s cluster management
+- Follows Kubernetes best practices
+- Pod offload pipeline fully functional
 
-This simpler approach is **recommended for training and deployments** where Helm complexity is not needed.
+This approach is **required for training and production deployments** where Kubernetes-native operations are expected.
 
 **Network**
 - Subnet: 192.168.2.0/24

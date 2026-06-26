@@ -22,11 +22,11 @@ For Interlink pod offload to work, ALL of these must be in place:
 
 **On Machine 2 (k3s):**
 5. **k3s with egress selector disabled** (install with `--egress-selector-mode=disabled`)
-6. **VirtualKubelet binary** (standalone process, NOT Helm-deployed)
-   - VirtualKubelet runs as simple binary: `./vk -nodename=interlink-node ...`
-   - Binary deployment chosen over Helm for simplicity
-   - Same functionality with fewer moving parts
-   - See FINAL_SUMMARY.md section "VirtualKubelet Deployment Method" for why
+6. **VirtualKubelet** (deployed via official Helm chart)
+   - VirtualKubelet runs as Kubernetes Pod via Helm deployment
+   - Installed from: https://virtual-kubelet.github.io/virtual-kubelet
+   - Recommended approach for production Kubernetes deployments
+   - Helm handles pod lifecycle, updates, and scaling
 
 ## Overview
 
