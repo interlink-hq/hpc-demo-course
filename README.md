@@ -11,23 +11,20 @@ Kubernetes pods scheduled to the virtual node will be automatically offloaded to
 
 ## Quick Start
 
-Follow these phases in order:
+**Start here:** Read **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** for the tested, end-to-end deployment procedure.
 
-1. **[Phase 1: SLURM Setup](phase1-slurm-setup.md)** - Deploy SLURM on Machine 1
-2. **[Phase 2: k3s Setup](phase2-k3s-setup.md)** - Deploy k3s on Machine 2  
-3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Deploy Interlink bridge using binaries
-4. **[Phase 4: Test Pod Offload](phase4-test-offload.md)** - Verify pods offload to SLURM
+This is the definitive reference that has been validated on real hardware.
 
-### VirtualKubelet Deployment Options
+### Legacy Documentation
 
-For Phase 3, you can deploy VirtualKubelet in two ways:
+For background information on specific components:
 
-- **[Binary Approach](phase3-interlink-setup.md)** - Manual binary deployment (original method)
-- **[Helm Chart Approach](HELM_DEPLOYMENT.md)** - **Recommended** for production (declarative, easier management)
+1. **[Phase 1: SLURM Setup](phase1-slurm-setup.md)** - Initial SLURM deployment
+2. **[Phase 2: k3s Setup](phase2-k3s-setup.md)** - Initial k3s deployment  
+3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Detailed Interlink binary configuration (may have minor issues - use COMPLETE_GUIDE.md instead)
+4. **[Phase 4: Test Pod Offload](phase4-test-offload.md)** - Testing procedures
 
-The Helm chart handles all Kubernetes manifests and RBAC configuration automatically.
-
-Estimated time: **30-45 minutes** per phase.
+**Recommended:** Follow COMPLETE_GUIDE.md for your first deployment.
 
 ## Architecture Overview
 
