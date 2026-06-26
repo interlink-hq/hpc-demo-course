@@ -248,12 +248,12 @@ fcba594 - Add comprehensive Apptainer fix documentation
 
 **Previous Exploration (not in final implementation):**
 - `0f8f8d3` - Remove Helm deployment (attempted but incomplete - TLS certificate issues)
-- `fad4557` - Deploy VirtualKubelet via official Helm chart (explored but not needed)
+- `fad4557` - Deploy VirtualKubelet via official Helm chart (now REQUIRED)
 
-**Why Helm Was Not Used:**
-Pod log retrieval requires proper TLS certificate configuration in VirtualKubelet's HTTPS server. Both Helm and binary deployments face the same limitation, so the simpler binary approach was chosen for this training course. See `VirtualKubelet Deployment Method` section above for details.
+**Why Helm Is Required:**
+VirtualKubelet must be deployed via the official Helm chart for proper lifecycle management, RBAC permissions, and Kubernetes-native operations. Both Helm and binary deployments face the same pod log TLS limitation, but Helm provides better scalability and maintenance for production deployments. See `VirtualKubelet Deployment Method` section above for details.
 
-**Bottom Line:** The current system uses binary deployment for VirtualKubelet, which is simpler, fully functional, and recommended for training.
+**Bottom Line:** The current system uses Helm deployment for VirtualKubelet, which is the recommended, production-ready, and Kubernetes-standard approach. Helm handles all lifecycle concerns including upgrades, rollbacks, and RBAC automatically.
 
 ## Conclusion
 
