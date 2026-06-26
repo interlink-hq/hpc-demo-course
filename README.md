@@ -20,6 +20,11 @@ This is the definitive reference that has been validated on real hardware.
 **Primary Resources:**
 1. **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** - Start here, end-to-end tested deployment
 2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Known limitation with ServiceAccount tokens and workarounds ⚠️
+3. **[DEPLOYMENT_METHODS.md](DEPLOYMENT_METHODS.md)** - Explains why binary deployment is used (not Helm) and deployment architecture
+
+**Understanding the Architecture:**
+1. **[FINAL_SUMMARY.md](FINAL_SUMMARY.md)** - Complete project overview with verification evidence
+2. **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive on all issues resolved
 
 **Legacy Documentation (background information):**
 1. **[Phase 1: SLURM Setup](phase1-slurm-setup.md)** - Initial SLURM deployment
@@ -27,7 +32,7 @@ This is the definitive reference that has been validated on real hardware.
 3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Detailed Interlink binary configuration
 4. **[Phase 4: Test Pod Offload](phase4-test-offload.md)** - Testing procedures
 
-**Reference:**
+**Troubleshooting & Reference:**
 - **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive on issues and solutions
 - **[APPTAINER_FIX.md](APPTAINER_FIX.md)** - Apptainer installation and integration
 
