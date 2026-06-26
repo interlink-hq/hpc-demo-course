@@ -453,6 +453,39 @@ ssh rocky@192.168.2.170 "sudo dnf install apptainer -y"
 2. Check VirtualKubelet logs: `ssh rocky@192.168.2.84 "tail -50 ~/interlink/vk.log"`
 3. Ensure kubeconfig is valid: `ssh rocky@192.168.2.84 "cat ~/interlink/vk-kubeconfig.yaml | head -10"`
 
+### Projected Volume Mount Failures (ServiceAccount Tokens)
+
+**Symptom:** Pod runs but Apptainer shows warnings like:
+```
+WARNING: skipping mount of .../token: stat .../token: no such file or directory
+FATAL: container creation failed: mount hook function failure
+```
+
+**Root Cause:** VirtualKubelet does not properly export projected volumes (ServiceAccount tokens, CA certs, namespace files) to the SLURM job environment. These volumes are created by Kubernetes but not transferred to the actual container runtime.
+
+**Current Behavior:**
+- Pod shows as "Running" in Kubernetes ✓
+- SLURM job is created and executed ✓
+- Apptainer attempts to mount the token/CA/namespace files ✗
+- Mount fails because files don't exist in SLURM job context
+- Container still executes but lacks ServiceAccount credentials
+
+**Workaround:** Use pods that don't require ServiceAccount access or disable automatic mounting:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-no-sa
+spec:
+  serviceAccountName: default
+  automountServiceAccountToken: false  # ← Add this
+  nodeSelector:
+    virtual-node.interlink/type: virtual-kubelet
+  # ... rest of pod spec
+```
+
+**Note:** This is a limitation of the current VirtualKubelet + Interlink integration and does not affect the core pod offload functionality. Pods execute successfully; they simply cannot access the Kubernetes API from within the container.
+
 ## Summary
 
 **What's happening:**
@@ -461,9 +494,10 @@ ssh rocky@192.168.2.170 "sudo dnf install apptainer -y"
 3. VirtualKubelet intercepts pod, sends it to Interlink API
 4. API converts pod spec to SLURM job script
 5. SLURM plugin submits job via sbatch
-6. Apptainer executes container in SLURM job
-7. Pod status updates back to Kubernetes
-8. User can view pod as if running locally
+6. Apptainer executes container in SLURM job environment
+7. ⚠️ ServiceAccount token files NOT copied to SLURM environment (known limitation)
+8. Container executes but cannot access Kubernetes API
+9. Pod status updates back to Kubernetes as Running
 
 **Critical components:**
 - ✓ Apptainer: Executes OCI/Docker images in SLURM
@@ -472,5 +506,6 @@ ssh rocky@192.168.2.170 "sudo dnf install apptainer -y"
 - ✓ VirtualKubelet: Watches Kubernetes pods, communicates with API
 - ✓ IP-based networking: Avoids SSRF triggers
 - ✓ k3s egress policies disabled: Allows pod log retrieval
+- ⚠️ Projected volumes: Not exported to SLURM (use `automountServiceAccountToken: false`)
 
 **All steps tested and verified on production hardware.**

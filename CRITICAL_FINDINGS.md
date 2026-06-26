@@ -1,7 +1,12 @@
 # Critical Findings: Full Interlink Bridge NOW WORKING ✓
 
-**Date:** June 25, 2026  
+**Date:** June 26, 2026  
 **Status:** ✅ FULLY WORKING - Pod Offload Verified End-to-End
+
+**KNOWN LIMITATION:** ServiceAccount token mounts fail in Apptainer containers
+- **Impact:** Pods cannot access Kubernetes API from within containers
+- **Workaround:** Use `automountServiceAccountToken: false` in pod specs
+- **Details:** See [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)
 
 ## Critical Prerequisites
 

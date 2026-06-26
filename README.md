@@ -15,14 +15,21 @@ Kubernetes pods scheduled to the virtual node will be automatically offloaded to
 
 This is the definitive reference that has been validated on real hardware.
 
-### Legacy Documentation
+### Documentation Structure
 
-For background information on specific components:
+**Primary Resources:**
+1. **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** - Start here, end-to-end tested deployment
+2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Known limitation with ServiceAccount tokens and workarounds ⚠️
 
+**Legacy Documentation (background information):**
 1. **[Phase 1: SLURM Setup](phase1-slurm-setup.md)** - Initial SLURM deployment
 2. **[Phase 2: k3s Setup](phase2-k3s-setup.md)** - Initial k3s deployment  
-3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Detailed Interlink binary configuration (may have minor issues - use COMPLETE_GUIDE.md instead)
+3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Detailed Interlink binary configuration
 4. **[Phase 4: Test Pod Offload](phase4-test-offload.md)** - Testing procedures
+
+**Reference:**
+- **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive on issues and solutions
+- **[APPTAINER_FIX.md](APPTAINER_FIX.md)** - Apptainer installation and integration
 
 **Recommended:** Follow COMPLETE_GUIDE.md for your first deployment.
 
