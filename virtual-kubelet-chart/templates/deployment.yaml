@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: virtual-kubelet-vk
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: virtual-kubelet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: virtual-kubelet-vk
+  template:
+    metadata:
+      labels:
+        app: virtual-kubelet-vk
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      # Run on host network to communicate with Interlink
+      hostNetwork: true
+      # Run with elevated privileges to access host resources
+      hostPID: true
+      # Tolerations for taint control
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+      
+      containers:
+      - name: virtual-kubelet
+        image: {{ .Values.vk.image.repository }}:{{ .Values.vk.image.tag }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        args:
+        - -c
+        - |
+          # Wait for kubeconfig to be available
+          until [ -f /etc/rancher/k3s/k3s.yaml ]; do
+            echo "Waiting for k3s kubeconfig..."
+            sleep 2
+          done
+          
+          # Copy kubeconfig to accessible location
+          cp /etc/rancher/k3s/k3s.yaml /tmp/kubeconfig.yaml
+          export KUBECONFIG=/tmp/kubeconfig.yaml
+          
+          # Use pre-built binary or download if not present
+          if [ -f {{ .Values.vk.binary.localPath }} ]; then
+            VK={{ .Values.vk.binary.localPath }}
+          else
+            echo "VirtualKubelet binary not found at {{ .Values.vk.binary.localPath }}"
+            exit 1
+          fi
+          
+          # Create config file
+          cat > /tmp/vk-config.yaml <<EOF
+          InterlinkURL: {{ .Values.interlink.url }}
+          InterlinkPort: {{ .Values.interlink.port }}
+          VerboseLogging: true
+          ErrorsOnlyLogging: false
+          EOF
+          
+          echo "Starting VirtualKubelet..."
+          echo "Node name: {{ .Values.nodeName }}"
+          echo "Interlink URL: {{ .Values.interlink.url }}:{{ .Values.interlink.port }}"
+          
+          # Run VirtualKubelet
+          exec $VK -nodename={{ .Values.nodeName }} -configpath=/tmp/vk-config.yaml
+        
+        env:
+        - name: KUBECONFIG
+          value: /tmp/kubeconfig.yaml
+        
+        volumeMounts:
+        - name: k3s-config
+          mountPath: /etc/rancher/k3s
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: vk-binary
+          mountPath: /home/rocky
+          readOnly: true
+        
+        resources:
+          requests:
+            cpu: {{ .Values.vk.resources.requests.cpu }}
+            memory: {{ .Values.vk.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.vk.resources.limits.cpu }}
+            memory: {{ .Values.vk.resources.limits.memory }}
+        
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ps aux | grep -q '[v]irtual-kubelet' && exit 0 || exit 1"
+          initialDelaySeconds: 10
+          periodSeconds: 30
+      
+      volumes:
+      - name: k3s-config
+        hostPath:
+          path: /etc/rancher/k3s
+          type: Directory
+      - name: tmp
+        emptyDir: {}
+      - name: vk-binary
+        hostPath:
+          path: /home/rocky
+          type: Directory

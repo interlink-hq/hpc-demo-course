@@ -18,6 +18,15 @@ Follow these phases in order:
 3. **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Deploy Interlink bridge using binaries
 4. **[Phase 4: Test Pod Offload](phase4-test-offload.md)** - Verify pods offload to SLURM
 
+### VirtualKubelet Deployment Options
+
+For Phase 3, you can deploy VirtualKubelet in two ways:
+
+- **[Binary Approach](phase3-interlink-setup.md)** - Manual binary deployment (original method)
+- **[Helm Chart Approach](HELM_DEPLOYMENT.md)** - **Recommended** for production (declarative, easier management)
+
+The Helm chart handles all Kubernetes manifests and RBAC configuration automatically.
+
 Estimated time: **30-45 minutes** per phase.
 
 ## Architecture Overview
