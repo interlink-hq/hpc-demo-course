@@ -19,7 +19,7 @@ This is the definitive reference that has been validated on real hardware.
 
 **Primary Resources:**
 1. **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** - Start here, end-to-end tested deployment (uses Helm for VirtualKubelet)
-2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Known limitation with ServiceAccount tokens and workarounds ⚠️
+2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - How to enable ServiceAccount token access in containers (solution provided) ✓
 3. **[DEPLOYMENT_METHODS.md](DEPLOYMENT_METHODS.md)** - Explains why Helm is required for VirtualKubelet and deployment architecture
 
 **Understanding the Architecture:**

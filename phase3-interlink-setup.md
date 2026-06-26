@@ -390,9 +390,9 @@ kubectl get clusterrole | grep virtual-kubelet
 kubectl get clusterrolebinding | grep virtual-kubelet
 ```
 
-**Service Account Token Limitation:**
-- Tokens are NOT exported to SLURM containers (known limitation)
-- Workaround: Use `automountServiceAccountToken: false` in pod specs
+**Service Account Token Access:**
+- To enable tokens in SLURM containers: add hostPath volume mount to VirtualKubelet pod (see VOLUME_MOUNT_LIMITATION.md)
+- Alternative: Use `automountServiceAccountToken: false` if Kubernetes API access not needed
 - Reference: [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)
 
 **Official RBAC Documentation:**

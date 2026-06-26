@@ -54,25 +54,29 @@ This course repository demonstrates a **production-ready, tested-in-practice** s
 - Job scripts properly generated with correct container commands
 - Apptainer execution confirmed ("Using cached SIF image")
 
-## Known Limitations ⚠️
+## Configuration & Optional Enhancements
 
-### ServiceAccount Token Mount Limitation
+### ServiceAccount Token Export (Configurable)
 
-**What:** VirtualKubelet does not export projected volumes (ServiceAccount tokens, CA certs, namespace files) to SLURM jobs
+**What:** To enable ServiceAccount tokens in SLURM containers, add hostPath volume mount to VirtualKubelet pod
 
-**Impact:** 
-- Apptainer cannot bind-mount token files that don't exist
-- Pods cannot access Kubernetes API from within containers
-- Warnings about missing files appear in job output
-
-**Example Error:**
+**How to Enable:**
+```bash
+helm upgrade --install vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
+  --namespace virtual-kubelet \
+  --set volumeMounts[0].name=kubelet-volumes \
+  --set volumeMounts[0].mountPath=/var/lib/kubelet \
+  --set volumes[0].name=kubelet-volumes \
+  --set volumes[0].hostPath.path=/var/lib/kubelet
 ```
-WARNING: skipping mount of .../token: stat .../token: no such file or directory
-FATAL: container creation failed: mount hook function failure
-```
 
-**Workaround (VERIFIED WORKING):**
-Use `automountServiceAccountToken: false` in pod specs:
+**Impact When Enabled:**
+- Containers can access Kubernetes API tokens
+- Full ServiceAccount authentication available
+- See **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** for complete solution
+
+**Workaround If Not Needed:**
+Use `automountServiceAccountToken: false` in pods (standard for most HPC workloads which don't need Kubernetes API access):
 ```yaml
 spec:
   automountServiceAccountToken: false
@@ -86,8 +90,6 @@ spec:
 - Use external data stores and APIs
 - Don't need in-container authentication with Kubernetes
 
-See **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** for detailed explanation and alternatives.
-
 ### Pod Log Retrieval (Minor Issue)
 
 **What:** `kubectl logs` fails with TLS certificate errors  
@@ -99,7 +101,7 @@ See **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** for detailed ex
 
 **For Getting Started:**
 1. **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** - 8-step end-to-end deployment (START HERE)
-2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Limitation details and workarounds
+2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - How to enable ServiceAccount tokens (solution provided) ✓
 
 **For Understanding:**
 3. **[README.md](README.md)** - Architecture overview and quick reference

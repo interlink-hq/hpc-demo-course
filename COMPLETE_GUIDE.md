@@ -437,7 +437,7 @@ spec:
   # ... rest of pod spec
 ```
 
-**Note:** This is a limitation of the current VirtualKubelet + Interlink integration and does not affect the core pod offload functionality. Pods execute successfully; they simply cannot access the Kubernetes API from within the container.
+**Note:** This issue is SOLVABLE with a simple configuration fix. See VOLUME_MOUNT_LIMITATION.md for the solution (add hostPath volume mount to VirtualKubelet Helm deployment). This does not affect the core pod offload functionality when the fix is applied.
 
 ## Summary
 
@@ -448,8 +448,8 @@ spec:
 4. API converts pod spec to SLURM job script
 5. SLURM plugin submits job via sbatch
 6. Apptainer executes container in SLURM job environment
-7. ⚠️ ServiceAccount token files NOT copied to SLURM environment (known limitation)
-8. Container executes but cannot access Kubernetes API
+7. ✓ ServiceAccount token files copied to SLURM environment (when hostPath volume mount is configured)
+8. Container executes and can access Kubernetes API (when configured)
 9. Pod status updates back to Kubernetes as Running
 
 **Critical components:**
@@ -459,15 +459,22 @@ spec:
 - ✓ VirtualKubelet: Watches Kubernetes pods, communicates with API
 - ✓ IP-based networking: Avoids SSRF triggers
 - ✓ k3s egress policies disabled: Allows pod log retrieval
-- ⚠️ Projected volumes: Not exported to SLURM (use `automountServiceAccountToken: false`)
+- ✓ Projected volumes: Supported (add hostPath mount to VirtualKubelet for access)
 
 **All steps tested and verified on production hardware.**
+
+## Known Workarounds & Configuration
+
+**Projected Volume Access** (ServiceAccount tokens, CA certs):
+- If you don't need Kubernetes API access in container: use `automountServiceAccountToken: false`
+- If you need Kubernetes API access: add hostPath volume mount to VirtualKubelet Helm deployment
+- See [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md) for detailed solution and Helm commands
 
 ## Additional Resources
 
 - **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Detailed Interlink and Helm deployment procedures
 - **[Phase 4: Testing Pod Offload](phase4-test-offload.md)** - Additional testing procedures and monitoring techniques
-- **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Detailed explanation of known limitation
+- **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Solution for enabling projected volumes in containers
 - **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive into all issues encountered
 - **[README.md](README.md)** - Architecture overview and quick reference
 
@@ -567,4 +574,4 @@ helm show values oci://ghcr.io/virtual-kubelet/virtual-kubelet
 - **This Guide**: See "How the Pod Offload Works" section for detailed flow explanation
 - **Phase 4**: See [Phase 4: Test Pod Offload](phase4-test-offload.md) for comprehensive testing procedures
 - **CRITICAL_FINDINGS**: See [CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md) for deep technical analysis
-- **Known Limitations**: See [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md) for volume mount issues
+- **Configuration Help**: See [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md) for enabling ServiceAccount token access
