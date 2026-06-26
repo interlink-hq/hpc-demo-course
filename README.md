@@ -18,9 +18,9 @@ This is the definitive reference that has been validated on real hardware.
 ### Documentation Structure
 
 **Primary Resources:**
-1. **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** - Start here, end-to-end tested deployment
+1. **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** - Start here, end-to-end tested deployment (uses Helm for VirtualKubelet)
 2. **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Known limitation with ServiceAccount tokens and workarounds ⚠️
-3. **[DEPLOYMENT_METHODS.md](DEPLOYMENT_METHODS.md)** - Explains why binary deployment is used (not Helm) and deployment architecture
+3. **[DEPLOYMENT_METHODS.md](DEPLOYMENT_METHODS.md)** - Explains why Helm is required for VirtualKubelet and deployment architecture
 
 **Understanding the Architecture:**
 1. **[FINAL_SUMMARY.md](FINAL_SUMMARY.md)** - Complete project overview with verification evidence
