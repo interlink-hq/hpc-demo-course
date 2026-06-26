@@ -354,6 +354,86 @@ helm status vk -n virtual-kubelet
 - Check Helm release status: `helm status vk -n virtual-kubelet`
 - View Helm install output: `helm get values vk -n virtual-kubelet`
 
+## Advanced Configuration & References
+
+### Helm Values for Advanced Customization
+
+**Customize VirtualKubelet deployment with Helm values:**
+```bash
+# Example: Different log level, custom resource limits
+helm upgrade vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
+  --namespace virtual-kubelet \
+  --set nodeName=custom-node \
+  --set provider=interlink \
+  --set logs.level=debug \
+  --set interlink.url=http://192.168.2.170 \
+  --set interlink.port=3000 \
+  --set resources.requests.memory=512Mi \
+  --set resources.requests.cpu=250m
+```
+
+**Full values reference:**
+- View all available values: `helm show values oci://ghcr.io/virtual-kubelet/virtual-kubelet`
+- Current deployment: `helm get values vk -n virtual-kubelet`
+
+**Official chart documentation:**
+- https://github.com/virtual-kubelet/virtual-kubelet/tree/master/charts
+- https://github.com/virtual-kubelet/virtual-kubelet/blob/master/charts/virtual-kubelet/README.md
+
+### RBAC & Authentication
+
+**Kubernetes RBAC (Automatically Created):**
+```bash
+# Verify auto-created RBAC resources
+kubectl get serviceaccount -n virtual-kubelet
+kubectl get clusterrole | grep virtual-kubelet
+kubectl get clusterrolebinding | grep virtual-kubelet
+```
+
+**Service Account Token Limitation:**
+- Tokens are NOT exported to SLURM containers (known limitation)
+- Workaround: Use `automountServiceAccountToken: false` in pod specs
+- Reference: [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)
+
+**Official RBAC Documentation:**
+- https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+- https://kubernetes.io/docs/concepts/security/service-accounts/
+
+### Interlink Configuration Files
+
+**SlurmConfig.yaml (Machine 1):**
+- Location: `/opt/interlink/interlink/SlurmConfig.yaml`
+- Controls SLURM job parameters (partition, account, timeout)
+- Reference: https://github.com/interlink-hq/interlink/blob/main/docs/SlurmConfig.md
+
+**VirtualKubelet Configuration (Machine 2):**
+- No manual ConfigMap required (Helm handles it)
+- Configuration passed via `--set` flags
+- View: `helm get values vk -n virtual-kubelet`
+
+**Key Configuration Parameters:**
+- `interlink.url`: Interlink API address (must use IP, not localhost)
+- `interlink.port`: Interlink API port (default: 3000)
+- `provider`: Must be set to `interlink`
+- `nodeName`: Virtual node name visible in k3s
+
+### Official Project References
+
+**VirtualKubelet:**
+- GitHub: https://github.com/virtual-kubelet/virtual-kubelet
+- Docs: https://virtual-kubelet.io/docs/
+- Troubleshooting: https://virtual-kubelet.io/docs/troubleshooting/
+
+**Interlink HPC:**
+- GitHub: https://github.com/interlink-hq/interlink
+- Docs: https://interlink.almalinux.org/docs/
+- SLURM Plugin: https://github.com/interlink-hq/interlink/blob/main/plugins/SLURM.md
+
+**Kubernetes & Helm:**
+- Helm: https://helm.sh/docs/
+- k3s: https://docs.k3s.io/
+- Custom Schedulers: https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/
+
 ---
 
 Next: [Phase 4: Test Pod Offload](phase4-test-offload.md)

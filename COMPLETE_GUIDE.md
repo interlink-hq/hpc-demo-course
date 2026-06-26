@@ -457,3 +457,101 @@ spec:
 - **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Detailed explanation of known limitation
 - **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive into all issues encountered
 - **[README.md](README.md)** - Architecture overview and quick reference
+
+## Advanced Configuration & References
+
+### Authentication & Authorization (AuthN/Z)
+
+VirtualKubelet and Interlink support multiple authentication methods:
+
+**RBAC (Kubernetes Role-Based Access Control)**
+- Automatically created by Helm chart
+- Verify with: `kubectl get clusterrole,clusterrolebinding | grep virtual-kubelet`
+- Official documentation: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+
+**Service Account Authentication**
+- Automatically created in `virtual-kubelet` namespace
+- Verify with: `kubectl get serviceaccount -n virtual-kubelet`
+- Note: Tokens NOT exported to SLURM containers (use `automountServiceAccountToken: false`)
+
+**Interlink API Authentication**
+- Default: No authentication (IP-based access control)
+- Custom auth options documented in: https://github.com/interlink-hq/interlink
+
+### Helm Values & Configuration Reference
+
+**Complete list of Helm values supported by the VirtualKubelet chart:**
+```bash
+# View current values
+helm get values vk -n virtual-kubelet
+
+# View all available values
+helm show values oci://ghcr.io/virtual-kubelet/virtual-kubelet
+```
+
+**Common Helm values for customization:**
+- `nodeName`: Virtual node name in Kubernetes (default: `interlink-node`)
+- `provider`: Provider name (must be `interlink`)
+- `logs.level`: Logging level (debug, info, warn, error)
+- `interlink.url`: Interlink API URL (e.g., `http://192.168.2.170`)
+- `interlink.port`: Interlink API port (default: `3000`)
+- `image.repository`: VirtualKubelet image repository
+- `image.tag`: VirtualKubelet image tag
+- `resources.requests.memory`: Memory request for VirtualKubelet pod
+- `resources.requests.cpu`: CPU request for VirtualKubelet pod
+
+**Reference documentation:**
+- VirtualKubelet Helm chart: https://github.com/virtual-kubelet/virtual-kubelet/tree/master/charts
+- Official chart documentation: https://github.com/virtual-kubelet/virtual-kubelet/blob/master/charts/virtual-kubelet/README.md
+
+### Configuration File References
+
+**Interlink Configuration Files:**
+- **SlurmConfig** (SLURM plugin): `/opt/interlink/interlink/SlurmConfig.yaml`
+  - Specifies SLURM cluster parameters (partition, account, job timeout)
+  - Reference: https://github.com/interlink-hq/interlink/blob/main/docs/SlurmConfig.md
+  
+**VirtualKubelet Configuration (via Helm values):**
+- No manual ConfigMap needed (handled by Helm chart)
+- View deployed config: `kubectl get configmap -n virtual-kubelet`
+- Configuration passed via `--set` flags at deployment time
+
+**SLURM Job Configuration:**
+- SLURM converts pods to sbatch scripts automatically
+- Partition, account, and timeout set in SlurmConfig.yaml
+- Pod resource requests map to SLURM job parameters
+
+**k3s Configuration:**
+- Egress selector mode must be disabled: `--egress-selector-mode=disabled`
+- VirtualKubelet namespace: `virtual-kubelet`
+- Virtual node name: `interlink-node`
+
+### Additional Official Resources
+
+**VirtualKubelet Project:**
+- GitHub Repository: https://github.com/virtual-kubelet/virtual-kubelet
+- Official Documentation: https://virtual-kubelet.io/docs/
+- Troubleshooting Guide: https://virtual-kubelet.io/docs/troubleshooting/
+
+**Interlink Project:**
+- GitHub Repository: https://github.com/interlink-hq/interlink
+- Official Documentation: https://interlink.almalinux.org/docs/
+- SLURM Plugin Guide: https://github.com/interlink-hq/interlink/blob/main/plugins/SLURM.md
+
+**Kubernetes Documentation:**
+- RBAC Authorization: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+- Service Accounts: https://kubernetes.io/docs/concepts/security/service-accounts/
+- Custom Scheduler: https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/
+- Node Selection: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+
+**Helm Documentation:**
+- Helm Official Site: https://helm.sh/
+- Helm Getting Started: https://helm.sh/docs/intro/quickstart/
+- Helm Values and Templates: https://helm.sh/docs/chart_template_guide/
+
+### Troubleshooting Resources
+
+- **This Guide**: See "How the Pod Offload Works" section for detailed flow explanation
+- **Phase 4**: See [Phase 4: Test Pod Offload](phase4-test-offload.md) for comprehensive testing procedures
+- **CRITICAL_FINDINGS**: See [CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md) for deep technical analysis
+- **Known Limitations**: See [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md) for volume mount issues
