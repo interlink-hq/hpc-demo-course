@@ -199,103 +199,27 @@ Expected output:
 
 ## Step 5: Deploy VirtualKubelet via Helm (Machine 2)
 
-### 5.1: Add VirtualKubelet Helm Repository
+**Deploy VirtualKubelet using the official Helm chart from OCI GitHub registry. RBAC is automatically handled by Helm.**
 
-```bash
-ssh rocky@192.168.2.84 << 'HELM_REPO'
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-echo "=== Adding Virtual Kubelet Helm repository ==="
-helm repo add virtual-kubelet https://virtual-kubelet.github.io/virtual-kubelet
-helm repo update
-
-echo "✓ Repository added"
-
-HELM_REPO
-```
-
-### 5.2: Create VirtualKubelet Namespace and ServiceAccount
-
-```bash
-ssh rocky@192.168.2.84 << 'VK_SETUP'
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-echo "=== Creating namespace and RBAC ==="
-kubectl create namespace virtual-kubelet || true
-
-kubectl apply -f - <<'YAML'
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: virtual-kubelet
-  namespace: virtual-kubelet
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: virtual-kubelet
-rules:
-- apiGroups: ["coordination.k8s.io"]
-  resources: ["leases"]
-  verbs: ["update", "create", "get", "list", "watch", "patch"]
-- apiGroups: [""]
-  resources: ["configmaps", "secrets", "services", "serviceaccounts", "namespaces"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["delete", "get", "list", "watch", "patch"]
-- apiGroups: [""]
-  resources: ["nodes"]
-  verbs: ["create", "get"]
-- apiGroups: [""]
-  resources: ["nodes/status"]
-  verbs: ["update", "patch"]
-- apiGroups: [""]
-  resources: ["pods/status"]
-  verbs: ["update", "patch"]
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-- apiGroups: ["certificates.k8s.io"]
-  resources: ["certificatesigningrequests"]
-  verbs: ["create", "get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: virtual-kubelet
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: virtual-kubelet
-subjects:
-- kind: ServiceAccount
-  name: virtual-kubelet
-  namespace: virtual-kubelet
-YAML
-
-echo "✓ Namespace and RBAC configured"
-
-VK_SETUP
-```
-
-### 5.3: Deploy VirtualKubelet via Helm
+### 5.1: Deploy VirtualKubelet via Helm from OCI Registry
 
 ```bash
 ssh rocky@192.168.2.84 << 'HELM_DEPLOY'
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-echo "=== Deploying VirtualKubelet via Helm ==="
-helm upgrade --install vk virtual-kubelet/virtual-kubelet \
+echo "=== Creating virtual-kubelet namespace ==="
+kubectl create namespace virtual-kubelet || true
+
+echo ""
+echo "=== Deploying VirtualKubelet via Helm from OCI registry ==="
+helm upgrade --install vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
   --namespace virtual-kubelet \
   --set nodeName=interlink-node \
   --set provider=interlink \
-  --set provider.enableHA=true \
   --set logs.level=info \
-  --set serviceAccount.name=virtual-kubelet \
   --wait
 
-echo "✓ VirtualKubelet deployed"
+echo "✓ VirtualKubelet deployed via Helm (RBAC automatically configured)"
 
 echo ""
 echo "=== Verification ==="
@@ -310,7 +234,7 @@ NAME                                         READY   STATUS    RESTARTS   AGE
 vk-virtual-kubelet-XXXXXXXXXX-XXXXX         1/1     Running   0          5s
 ```
 
-### 5.4: Create ConfigMap for Interlink Configuration
+### 5.2: Create ConfigMap for Interlink Configuration
 
 ```bash
 ssh rocky@192.168.2.84 << 'CONFIGMAP'
@@ -366,14 +290,19 @@ echo ""
 echo "=== All Nodes ==="
 kubectl get nodes
 
+echo ""
+echo "=== RBAC (automatically configured by Helm) ==="
+kubectl get serviceaccount -n virtual-kubelet
+kubectl get clusterrole,clusterrolebinding | grep virtual-kubelet
+
 VERIFY_VK
 ```
 
 Expected output:
 ```
 ✓ VirtualKubelet pod running in virtual-kubelet namespace
-✓ Virtual node "interlink-node" appears in node list
-✓ Node status is Ready for virtual node
+✓ Virtual node "interlink-node" appears in node list with Ready status
+✓ ServiceAccount and ClusterRole/ClusterRoleBinding automatically created by Helm
 ```
 
 ## Step 7: Test Pod Offload

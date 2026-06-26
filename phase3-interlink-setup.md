@@ -186,102 +186,24 @@ rocky    77436  1.3  0.4 1303460 38648 ?  Sl  15:31   0:00 ./interlink-api
 
 ## Step 4: Deploy VirtualKubelet via Helm (Machine 2)
 
-**VirtualKubelet MUST be deployed via the official Helm chart.** Do NOT use the binary approach.
+**VirtualKubelet is deployed via the official Helm chart from OCI GitHub registry. Helm automatically handles RBAC setup.**
 
-### Step 4.1: Add Helm Repository
-
-```bash
-ssh rocky@192.168.2.84 << 'HELM_REPO'
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-echo "=== Adding Virtual Kubelet Helm repository ==="
-helm repo add virtual-kubelet https://virtual-kubelet.github.io/virtual-kubelet
-helm repo update
-
-echo "✓ Repository added"
-HELM_REPO
-```
-
-### Step 4.2: Create VirtualKubelet Namespace and RBAC
-
-```bash
-ssh rocky@192.168.2.84 << 'RBAC'
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-echo "=== Creating namespace ==="
-kubectl create namespace virtual-kubelet || true
-
-echo ""
-echo "=== Creating ServiceAccount and RBAC ==="
-kubectl apply -f - <<'YAML'
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: virtual-kubelet
-  namespace: virtual-kubelet
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: virtual-kubelet
-rules:
-- apiGroups: ["coordination.k8s.io"]
-  resources: ["leases"]
-  verbs: ["update", "create", "get", "list", "watch", "patch"]
-- apiGroups: [""]
-  resources: ["configmaps", "secrets", "services", "serviceaccounts", "namespaces"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["delete", "get", "list", "watch", "patch"]
-- apiGroups: [""]
-  resources: ["nodes"]
-  verbs: ["create", "get"]
-- apiGroups: [""]
-  resources: ["nodes/status"]
-  verbs: ["update", "patch"]
-- apiGroups: [""]
-  resources: ["pods/status"]
-  verbs: ["update", "patch"]
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-- apiGroups: ["certificates.k8s.io"]
-  resources: ["certificatesigningrequests"]
-  verbs: ["create", "get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: virtual-kubelet
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: virtual-kubelet
-subjects:
-- kind: ServiceAccount
-  name: virtual-kubelet
-  namespace: virtual-kubelet
-YAML
-
-echo "✓ RBAC configured"
-RBAC
-```
-
-### Step 4.3: Deploy VirtualKubelet via Helm Chart
+### Step 4.1: Deploy VirtualKubelet via Helm from OCI Registry
 
 ```bash
 ssh rocky@192.168.2.84 << 'HELM_DEPLOY'
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-echo "=== Deploying VirtualKubelet via Helm ==="
-helm upgrade --install vk virtual-kubelet/virtual-kubelet \
+echo "=== Creating virtual-kubelet namespace ==="
+kubectl create namespace virtual-kubelet || true
+
+echo ""
+echo "=== Deploying VirtualKubelet via Helm from OCI registry ==="
+helm upgrade --install vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
   --namespace virtual-kubelet \
   --set nodeName=interlink-node \
   --set provider=interlink \
-  --set provider.enableHA=true \
   --set logs.level=info \
-  --set serviceAccount.name=virtual-kubelet \
   --wait
 
 echo "✓ VirtualKubelet deployed via Helm"
@@ -300,7 +222,9 @@ NAME                                    READY   STATUS    RESTARTS   AGE
 vk-virtual-kubelet-XXXXXXXXXX-XXXXX    1/1     Running   0          10s
 ```
 
-### Step 4.4: Create Interlink Configuration ConfigMap
+### Step 4.2: Configure Interlink Connection
+
+Create ConfigMap with Interlink configuration:
 
 ```bash
 ssh rocky@192.168.2.84 << 'CONFIGMAP'
@@ -350,7 +274,11 @@ echo "=== Checking Virtual Node Registration ==="
 kubectl get nodes
 
 echo ""
-echo "✓ VirtualKubelet deployment complete"
+echo "=== RBAC (managed by Helm) ==="
+kubectl get serviceaccount -n virtual-kubelet
+
+echo ""
+echo "✓ VirtualKubelet Helm deployment complete"
 VERIFY_VK
 ```
 
@@ -360,6 +288,8 @@ NAME                    STATUS   ROLES           VERSION
 interlink-node          Ready    agent           test
 corso-hpc-2.cloudcnaf   Ready    control-plane   v1.31.4+k3s1
 ```
+
+**Note:** The Helm chart automatically creates all necessary RBAC resources (ServiceAccount, ClusterRole, ClusterRoleBinding) in the virtual-kubelet namespace.
 
 ## Step 6: Verify Connectivity
 
