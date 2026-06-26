@@ -144,11 +144,11 @@ See **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** for detailed ex
 **Impact:** Medium - pod logs unavailable (pod execution works)  
 **Status:** ✅ Verified and documented
 
-### 6. ServiceAccount Token Mount Failures (NEW)
-**Root Cause:** VirtualKubelet does not export projected volumes  
-**Solution:** Use `automountServiceAccountToken: false` in pod specs  
-**Impact:** Low - only affects pods needing Kubernetes API access  
-**Status:** ✅ Identified, workaround tested and verified
+### 6. ServiceAccount Token Mount Failures (INVESTIGATION COMPLETE)
+**Root Cause:** VirtualKubelet pod lacks hostPath volume mount to `/var/lib/kubelet` - it cannot access projected volume files  
+**Solution:** Add hostPath volume mount to VirtualKubelet Helm deployment (see VOLUME_MOUNT_LIMITATION.md for Helm values)  
+**Impact:** Fixable with simple configuration change - projected volumes ARE supported by Interlink  
+**Status:** ✅ Root cause identified, fix documented
 
 ## Hardware Configuration Tested
 

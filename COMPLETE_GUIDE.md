@@ -401,16 +401,29 @@ WARNING: skipping mount of .../token: stat .../token: no such file or directory
 FATAL: container creation failed: mount hook function failure
 ```
 
-**Root Cause:** VirtualKubelet does not properly export projected volumes (ServiceAccount tokens, CA certs, namespace files) to the SLURM job environment. These volumes are created by Kubernetes but not transferred to the actual container runtime.
+**Root Cause:** VirtualKubelet pod lacks a hostPath volume mount to access k3s kubelet directories. When VirtualKubelet tries to read projected volume files from `/var/lib/kubelet/pods/{uid}/volumes/kubernetes.io~projected/`, it can't access them because it doesn't have the necessary volume mount. It sends empty or incomplete volume info to Interlink, which creates directories but has no files to include in the SLURM job.
 
-**Current Behavior:**
+**The Fix:** Add hostPath volume mount to VirtualKubelet Helm deployment:
+```bash
+helm upgrade vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
+  --namespace virtual-kubelet \
+  --set volumeMounts[0].name=kubelet-volumes \
+  --set volumeMounts[0].mountPath=/var/lib/kubelet \
+  --set volumeMounts[0].readOnly=true \
+  --set volumes[0].name=kubelet-volumes \
+  --set volumes[0].hostPath.path=/var/lib/kubelet
+```
+
+With this fix, VirtualKubelet can read the token/ca/namespace files and send them to Interlink, allowing Apptainer to mount them successfully.
+
+**Current Behavior (without fix):**
 - Pod shows as "Running" in Kubernetes ✓
 - SLURM job is created and executed ✓
 - Apptainer attempts to mount the token/CA/namespace files ✗
 - Mount fails because files don't exist in SLURM job context
 - Container still executes but lacks ServiceAccount credentials
 
-**Workaround:** Use pods that don't require ServiceAccount access or disable automatic mounting:
+**Workaround (if fix not applied):** Use pods that don't require ServiceAccount access or disable automatic mounting:
 ```yaml
 apiVersion: v1
 kind: Pod
