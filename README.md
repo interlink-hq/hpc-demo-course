@@ -126,34 +126,57 @@ curl http://192.168.2.170:3000/  # From Machine 2 (after Phase 3)
 
 ## Testing Your Setup
 
-After Phase 3, test with:
+After deploying VirtualKubelet via Helm, test with:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-# Submit test pod
-/usr/local/bin/k3s kubectl apply -f - <<'EOF'
+# Submit test pod with proper constraints
+kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
   name: hello-slurm
 spec:
-  nodeName: interlink-node
+  automountServiceAccountToken: false
+  nodeSelector:
+    virtual-node.interlink/type: virtual-kubelet
+  tolerations:
+  - key: virtual-node.interlink/no-schedule
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: node.kubernetes.io/not-ready
+    operator: Equal
+    value: "true"
+    effect: NoExecute
+  - key: node.kubernetes.io/network-unavailable
+    operator: Equal
+    value: "true"
+    effect: NoExecute
   containers:
   - name: app
-    image: busybox
-    command: ["echo", "Hello from SLURM!"]
+    image: busybox:latest
+    command: ["/bin/sh", "-c"]
+    args: ["echo 'Hello from SLURM!'; sleep 5"]
   restartPolicy: Never
 EOF
 
 # Watch pod status
-/usr/local/bin/k3s kubectl get pod hello-slurm -w
+kubectl get pod hello-slurm -w
 
 # Check logs
-/usr/local/bin/k3s kubectl logs hello-slurm
+kubectl logs hello-slurm
 ```
 
-See [Phase 4](phase4-test-offload.md) for detailed testing procedures.
+Expected output:
+```
+Pod shows as Running on interlink-node virtual node
+Output: "Hello from SLURM!" followed by sleep
+SLURM job visible on Machine 1
+```
+
+See [COMPLETE_GUIDE.md](COMPLETE_GUIDE.md) for detailed step-by-step testing procedures and [Phase 4](phase4-test-offload.md) for additional testing approaches.
 
 ## Troubleshooting Quick Reference
 
