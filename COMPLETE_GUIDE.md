@@ -452,6 +452,7 @@ spec:
 
 ## Additional Resources
 
+- **[Phase 3: Interlink Setup](phase3-interlink-setup.md)** - Detailed Interlink and Helm deployment procedures
 - **[Phase 4: Testing Pod Offload](phase4-test-offload.md)** - Additional testing procedures and monitoring techniques
 - **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** - Detailed explanation of known limitation
 - **[CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md)** - Technical deep-dive into all issues encountered
