@@ -10,15 +10,23 @@
 
 ## Critical Prerequisites
 
-For Interlink pod offload to work, ALL of these must be in place on Machine 1 (SLURM):
+For Interlink pod offload to work, ALL of these must be in place:
 
+**On Machine 1 (SLURM):**
 1. **SLURM installation** with sbatch, squeue, scancel commands
 2. **Apptainer/Singularity** container runtime (`apptainer --version`)
    - Install via: `sudo dnf install -y epel-release apptainer`
    - CRITICAL: Without this, pod execution fails
-3. **Interlink binaries**: Interlink API + SLURM plugin
+3. **Interlink binaries**: Interlink API + SLURM plugin (binary deployment)
 4. **Correct network configuration**: IP-based not localhost
-5. **k3s with egress selector disabled** on Machine 2
+
+**On Machine 2 (k3s):**
+5. **k3s with egress selector disabled** (install with `--egress-selector-mode=disabled`)
+6. **VirtualKubelet binary** (standalone process, NOT Helm-deployed)
+   - VirtualKubelet runs as simple binary: `./vk -nodename=interlink-node ...`
+   - Binary deployment chosen over Helm for simplicity
+   - Same functionality with fewer moving parts
+   - See FINAL_SUMMARY.md section "VirtualKubelet Deployment Method" for why
 
 ## Overview
 

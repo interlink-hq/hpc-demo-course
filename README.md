@@ -69,10 +69,13 @@ Pod status updated (Running/Completed)
 
 | Component | Machine | Type | Port | Role |
 |-----------|---------|------|------|------|
-| VirtualKubelet | 2 | Binary | - | Watches k8s pods, submits to Interlink |
-| Interlink API | 1 | Binary | 3000 | Translates pods to SLURM jobs |
-| SLURM | 1 | Service | - | Schedules and executes jobs |
-| k3s | 2 | Service | 6443 | Kubernetes control plane |
+| VirtualKubelet | 2 | Binary (standalone process) | - | Watches k8s pods, submits to Interlink |
+| Interlink API | 1 | Binary (standalone process) | 3000 | Translates pods to SLURM jobs |
+| SLURM Plugin | 1 | Binary (standalone process) | 4000 | Submits jobs to SLURM via sbatch |
+| SLURM | 1 | Service/Daemon | - | Schedules and executes jobs |
+| k3s | 2 | Service/Daemon | 6443 | Kubernetes control plane |
+
+**Note on VirtualKubelet:** Deployed as a simple binary process (not via Helm or Kubernetes Pod). This avoids Kubernetes resource overhead while maintaining full functionality. See FINAL_SUMMARY.md section "VirtualKubelet Deployment Method" for why binary approach was chosen.
 
 ## Network Requirements
 

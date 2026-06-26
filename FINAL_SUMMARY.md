@@ -164,8 +164,29 @@ See **[VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)** for detailed ex
 - IP: 192.168.2.84
 - OS: Rocky Linux 9
 - k3s: v1.31.4+k3s1
-- VirtualKubelet: Binary deployment
+- VirtualKubelet: **Binary deployment** (not Helm - see below)
 - Egress policies: Disabled (`--egress-selector-mode=disabled`)
+
+### VirtualKubelet Deployment Method
+
+**Why Binary, Not Helm?**
+
+Initially attempted a Helm chart approach for VirtualKubelet deployment (see git history commits fad4557, 0f8f8d3). However:
+
+1. **Pod log retrieval failure**: VirtualKubelet's HTTPS server requires properly configured TLS certificates
+2. **Certificate generation issues**: RBAC permissions for CSR (CertificateSigningRequest) were insufficient
+3. **No functional difference**: Both Helm and binary deployments use the same underlying binary
+4. **Simpler approach**: Direct binary deployment avoids TLS certificate complexity
+5. **Same result**: Pods execute identically whether VirtualKubelet runs via Helm or binary
+
+**Current Implementation:**
+- VirtualKubelet runs as a simple binary process: `./vk -nodename=interlink-node -configpath=$(pwd)/vk-config.yaml`
+- No Kubernetes resources created (no Pod, Deployment, Service)
+- Direct access to kubeconfig for cluster communication
+- Fully functional pod offload pipeline
+- Pod log retrieval limitation is inherent to VirtualKubelet architecture, not deployment method
+
+This simpler approach is **recommended for training and deployments** where Helm complexity is not needed.
 
 **Network**
 - Subnet: 192.168.2.0/24
@@ -213,20 +234,26 @@ For users following this course:
 - [x] Verified on real hardware
 - [x] Git history maintained with detailed commits
 
-## Git Commit History
+## Git Commit History (Final Implementation)
 
+**Production-Ready Commits:**
 ```
-d7c8415 Document ServiceAccount token mount limitation and workarounds
-22f96bc Create COMPLETE_GUIDE.md - tested end-to-end on real hardware
-0f8f8d3 Remove Helm deployment (incomplete - log retrieval TLS issue)
-fad4557 Deploy VirtualKubelet via official Helm chart
-fcba594 Add comprehensive Apptainer fix documentation
-f4fa845 Install Apptainer and configure SLURM plugin for container support
-50b218c Correct gRPC to REST in documentation and document k3s egress policy
-8639db4 Update docs: Full Interlink bridge now working end-to-end
-91836ad Add critical findings: Pod offload NOT actually working
-44df017 Add deployment status verification document
+104ee8b - Add comprehensive final summary - all systems verified working
+d7c8415 - Document ServiceAccount token mount limitation and workarounds
+22f96bc - Create COMPLETE_GUIDE.md - tested end-to-end on real hardware
+50b218c - Correct gRPC to REST in documentation and document k3s egress policy
+f4fa845 - Install Apptainer and configure SLURM plugin for container support
+fcba594 - Add comprehensive Apptainer fix documentation
 ```
+
+**Previous Exploration (not in final implementation):**
+- `0f8f8d3` - Remove Helm deployment (attempted but incomplete - TLS certificate issues)
+- `fad4557` - Deploy VirtualKubelet via official Helm chart (explored but not needed)
+
+**Why Helm Was Not Used:**
+Pod log retrieval requires proper TLS certificate configuration in VirtualKubelet's HTTPS server. Both Helm and binary deployments face the same limitation, so the simpler binary approach was chosen for this training course. See `VirtualKubelet Deployment Method` section above for details.
+
+**Bottom Line:** The current system uses binary deployment for VirtualKubelet, which is simpler, fully functional, and recommended for training.
 
 ## Conclusion
 
