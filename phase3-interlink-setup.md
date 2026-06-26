@@ -7,9 +7,9 @@ Deploy real Interlink binaries to bridge SLURM (Machine 1) and k3s (Machine 2).
 ```
 Machine 1 (192.168.2.170)              Machine 2 (192.168.2.84)
 ─────────────────────────              ──────────────────────
-Interlink API (port 3000)              VirtualKubelet Binary
-└─ REST/HTTP endpoint                  └─ Connects to Interlink API
-SLURM (local)                          k3s Kubernetes
+Interlink API (port 3000)              VirtualKubelet Pod
+└─ REST/HTTP endpoint                  └─ Deployed via Helm chart
+SLURM (local)                          k3s Kubernetes (Helm)
 └─ sbatch, squeue, scancel             └─ Watches for pods on "interlink-node"
 ```
 
@@ -38,24 +38,19 @@ ls -lh interlink-api ssh-tunnel
 M1SETUP
 ```
 
-### Machine 2 (k3s + VirtualKubelet)
+### Machine 2 (k3s + Helm)
+
+**Note:** VirtualKubelet is deployed via Helm, NOT as a binary. Install Helm instead:
 
 ```bash
 ssh rocky@192.168.2.84 << 'M2SETUP'
-VER="0.6.1-patch1"
-BASE="https://github.com/interlink-hq/interLink/releases/download/$VER"
+echo "=== Checking/Installing Helm ==="
+which helm || (
+  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  helm version
+)
 
-mkdir -p ~/interlink
-cd ~/interlink
-
-# Download VirtualKubelet binary
-curl -sL "$BASE/virtual-kubelet_Linux_x86_64" -o virtual-kubelet && chmod +x virtual-kubelet
-
-# Download SSH tunnel binary
-curl -sL "$BASE/ssh-tunnel_Linux_x86_64" -o ssh-tunnel && chmod +x ssh-tunnel
-
-echo "✓ Binaries downloaded"
-ls -lh virtual-kubelet ssh-tunnel
+echo "✓ Helm ready"
 M2SETUP
 ```
 
@@ -189,20 +184,41 @@ rocky    77429  0.3  0.4 1810088 33728 ?  Sl  15:31   0:00 ./slurm-plugin
 rocky    77436  1.3  0.4 1303460 38648 ?  Sl  15:31   0:00 ./interlink-api
 ```
 
-## Step 4: Configure VirtualKubelet (Machine 2)
+## Step 4: Deploy VirtualKubelet via Helm (Machine 2)
 
-### Set up RBAC
+**VirtualKubelet MUST be deployed via the official Helm chart.** Do NOT use the binary approach.
+
+### Step 4.1: Add Helm Repository
+
+```bash
+ssh rocky@192.168.2.84 << 'HELM_REPO'
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+echo "=== Adding Virtual Kubelet Helm repository ==="
+helm repo add virtual-kubelet https://virtual-kubelet.github.io/virtual-kubelet
+helm repo update
+
+echo "✓ Repository added"
+HELM_REPO
+```
+
+### Step 4.2: Create VirtualKubelet Namespace and RBAC
 
 ```bash
 ssh rocky@192.168.2.84 << 'RBAC'
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-/usr/local/bin/k3s kubectl apply -f - <<'YAML'
+echo "=== Creating namespace ==="
+kubectl create namespace virtual-kubelet || true
+
+echo ""
+echo "=== Creating ServiceAccount and RBAC ==="
+kubectl apply -f - <<'YAML'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: virtual-kubelet
-  namespace: default
+  namespace: virtual-kubelet
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -230,6 +246,9 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["create", "patch"]
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests"]
+  verbs: ["create", "get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -242,122 +261,105 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: virtual-kubelet
-  namespace: default
+  namespace: virtual-kubelet
 YAML
 
 echo "✓ RBAC configured"
 RBAC
 ```
 
-### Create kubeconfig for VirtualKubelet
+### Step 4.3: Deploy VirtualKubelet via Helm Chart
 
 ```bash
-ssh rocky@192.168.2.84 << 'KUBECONFIG'
-cd ~/interlink
-
+ssh rocky@192.168.2.84 << 'HELM_DEPLOY'
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-# Get k3s connection details
-VK_TOKEN=$(/usr/local/bin/k3s kubectl create token virtual-kubelet -n default --duration=87600h 2>/dev/null | head -c 100)
-K8S_SERVER=$(/usr/local/bin/k3s kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-K8S_CA_DATA=$(/usr/local/bin/k3s kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+echo "=== Deploying VirtualKubelet via Helm ==="
+helm upgrade --install vk virtual-kubelet/virtual-kubelet \
+  --namespace virtual-kubelet \
+  --set nodeName=interlink-node \
+  --set provider=interlink \
+  --set provider.enableHA=true \
+  --set logs.level=info \
+  --set serviceAccount.name=virtual-kubelet \
+  --wait
 
-cat > vk-kubeconfig.yaml <<KUBECFG
-apiVersion: v1
-kind: Config
-clusters:
-- name: default-cluster
-  cluster:
-    server: ${K8S_SERVER}
-    certificate-authority-data: ${K8S_CA_DATA}
-contexts:
-- name: default-context
-  context:
-    cluster: default-cluster
-    user: virtual-kubelet
-    namespace: default
-current-context: default-context
-users:
-- name: virtual-kubelet
-  user:
-    token: ${VK_TOKEN}
-KUBECFG
+echo "✓ VirtualKubelet deployed via Helm"
 
-chmod 600 vk-kubeconfig.yaml
-echo "✓ kubeconfig created"
-cat vk-kubeconfig.yaml | head -5
-KUBECONFIG
-```
-
-### Create VirtualKubelet config
-
-```bash
-ssh rocky@192.168.2.84 << 'VKCONFIG'
-cd ~/interlink
-
-cat > vk-config.yaml <<'EOF'
-InterlinkURL: "http://192.168.2.170"
-InterlinkPort: "3000"
-VerboseLogging: true
-ErrorsOnlyLogging: false
-ServiceAccount: "virtual-kubelet"
-Namespace: default
-Resources:
-  CPU: "100"
-  Memory: "128Gi"
-  Pods: "100"
-HTTP:
-  Insecure: true
-KubeletHTTP:
-  Insecure: true
-EOF
-
-echo "✓ VK config created"
-cat vk-config.yaml
-VKCONFIG
-```
-
-## Step 5: Start VirtualKubelet (Machine 2)
-
-```bash
-ssh rocky@192.168.2.84 << 'START_VK'
-cd ~/interlink
-
-# Kill any previous instance
-pkill -f virtual-kubelet || true
-sleep 2
-
-# Start VirtualKubelet in background
-nohup ./virtual-kubelet \
-  -configpath=./vk-config.yaml \
-  -nodename=interlink-node \
-  > vk.log 2>&1 &
-
-sleep 3
-
-echo "=== VirtualKubelet Status ==="
-ps aux | grep -E '[v]irtual-kubelet'
 echo ""
-echo "=== VK Logs ==="
-tail -15 vk.log
+echo "=== Verification ==="
+kubectl get pods -n virtual-kubelet -o wide
+kubectl get nodes | grep interlink-node
 
-START_VK
+HELM_DEPLOY
 ```
 
-### Verify VirtualKubelet registered
+Expected output:
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+vk-virtual-kubelet-XXXXXXXXXX-XXXXX    1/1     Running   0          10s
+```
+
+### Step 4.4: Create Interlink Configuration ConfigMap
 
 ```bash
-ssh rocky@192.168.2.84 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; /usr/local/bin/k3s kubectl get nodes -o wide'
+ssh rocky@192.168.2.84 << 'CONFIGMAP'
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+echo "=== Creating Interlink configuration ConfigMap ==="
+kubectl create configmap vk-config \
+  -n virtual-kubelet \
+  --from-literal=InterlinkURL=http://192.168.2.170 \
+  --from-literal=InterlinkPort=3000 \
+  --from-literal=VerboseLogging=true \
+  || kubectl patch configmap vk-config -n virtual-kubelet \
+     -p "$(cat <<'EOF'
+{
+  "data": {
+    "InterlinkURL": "http://192.168.2.170",
+    "InterlinkPort": "3000",
+    "VerboseLogging": "true"
+  }
+}
+EOF
+)"
+
+echo "✓ ConfigMap created"
+CONFIGMAP
+```
+
+## Step 5: Verify VirtualKubelet Helm Deployment (Machine 2)
+
+```bash
+ssh rocky@192.168.2.84 << 'VERIFY_VK'
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+echo "=== Checking VirtualKubelet Deployment ==="
+kubectl get deployment -n virtual-kubelet
+
+echo ""
+echo "=== Checking VirtualKubelet Pod ==="
+kubectl get pods -n virtual-kubelet -o wide
+
+echo ""
+echo "=== VirtualKubelet Logs ==="
+kubectl logs -n virtual-kubelet -l app=virtual-kubelet --tail=30
+
+echo ""
+echo "=== Checking Virtual Node Registration ==="
+kubectl get nodes
+
+echo ""
+echo "✓ VirtualKubelet deployment complete"
+VERIFY_VK
 ```
 
 Expected output:
 ```
 NAME                    STATUS   ROLES           VERSION
-interlink-node          NotReady agent           test
+interlink-node          Ready    agent           test
 corso-hpc-2.cloudcnaf   Ready    control-plane   v1.31.4+k3s1
 ```
-
-The `interlink-node` will show `NotReady` initially while connecting to the API. It should transition to `Ready` once connectivity is established.
 
 ## Step 6: Verify Connectivity
 
@@ -375,11 +377,12 @@ ssh rocky@192.168.2.84 'tail -20 ~/interlink/vk.log | grep -E "error|warn|Pod\|I
 
 ## Summary of Deployed Components
 
-| Component | Machine | Port | Binary | Config |
-|-----------|---------|------|--------|--------|
-| Interlink API | 1 | 3000 | ~/interlink/interlink-api | interlink-config.yaml |
-| VirtualKubelet | 2 | - | ~/interlink/virtual-kubelet | vk-config.yaml |
-| k3s | 2 | 6443 | /usr/local/bin/k3s | /etc/rancher/k3s/k3s.yaml |
+| Component | Machine | Port | Deployment Method | Config |
+|-----------|---------|------|-------------------|--------|
+| Interlink API | 1 | 3000 | Binary (~/interlink/interlink-api) | interlink-config.yaml |
+| SLURM Plugin | 1 | 4000 | Binary (~/interlink/slurm-plugin) | SlurmConfig.yaml |
+| VirtualKubelet | 2 | - | Helm Chart (virtual-kubelet/virtual-kubelet) | Helm values |
+| k3s | 2 | 6443 | k3s cluster | /etc/rancher/k3s/k3s.yaml |
 | SLURM | 1 | - | /opt/slurm/bin/* | - |
 
 ## Common Commands
@@ -389,16 +392,22 @@ ssh rocky@192.168.2.84 'tail -20 ~/interlink/vk.log | grep -E "error|warn|Pod\|I
 ssh rocky@192.168.2.170 'ps aux | grep interlink-api'
 ssh rocky@192.168.2.170 'tail -f ~/interlink/interlink-api.log'
 
-# Machine 2: Check VirtualKubelet
-ssh rocky@192.168.2.84 'ps aux | grep virtual-kubelet'
-ssh rocky@192.168.2.84 'tail -f ~/interlink/vk.log'
+# Machine 1: Check SLURM Plugin
+ssh rocky@192.168.2.170 'ps aux | grep slurm-plugin'
+ssh rocky@192.168.2.170 'tail -f ~/interlink/slurm-plugin.log'
+
+# Machine 2: Check VirtualKubelet (via Helm)
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl get pods -n virtual-kubelet -o wide
+kubectl logs -n virtual-kubelet -l app=virtual-kubelet -f
 
 # Machine 2: List nodes
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-/usr/local/bin/k3s kubectl get nodes -o wide
+kubectl get nodes -o wide
 
-# Machine 2: Check VirtualKubelet logs
-ssh rocky@192.168.2.84 'grep -E "error|Pod|Interlink" ~/interlink/vk.log | tail -20'
+# Machine 2: Check Helm deployment
+helm list -n virtual-kubelet
+helm status vk -n virtual-kubelet
 ```
 
 ## Troubleshooting
@@ -407,20 +416,41 @@ ssh rocky@192.168.2.84 'grep -E "error|Pod|Interlink" ~/interlink/vk.log | tail 
 
 - Check if port 3000 is already in use: `netstat -tlnp | grep 3000`
 - Verify config file path: `echo $INTERLINKCONFIGPATH`
-- Check API logs: `tail -50 interlink-api.log`
+- Check API logs: `tail -50 ~/interlink/interlink-api.log`
 
-### VirtualKubelet not showing as Ready
+### SLURM Plugin fails to start
 
-- Verify it's running: `ps aux | grep virtual-kubelet`
+- Ensure it starts BEFORE the API: `ps aux | grep -E '[s]lurm-plugin|[i]nterlink-api'`
+- Check plugin logs: `tail -50 ~/interlink/slurm-plugin.log`
+- Verify Apptainer is installed: `apptainer --version`
+
+### VirtualKubelet Helm pod not running
+
+- Check Helm deployment: `kubectl get deployment -n virtual-kubelet`
+- Check pod status: `kubectl get pods -n virtual-kubelet`
+- Check pod logs: `kubectl logs -n virtual-kubelet -l app=virtual-kubelet --tail=50`
+- Verify Helm values: `helm values vk -n virtual-kubelet`
+
+### Virtual node not showing as Ready
+
+- Verify VirtualKubelet pod is running: `kubectl get pods -n virtual-kubelet`
 - Check connectivity to Interlink API: `curl http://192.168.2.170:3000/`
-- Review logs: `tail -50 vk.log`
+- Review VirtualKubelet logs: `kubectl logs -n virtual-kubelet -l app=virtual-kubelet`
+- Check ConfigMap: `kubectl get configmap vk-config -n virtual-kubelet`
 
 ### Pod not scheduling to interlink-node
 
-- Confirm node exists: `/usr/local/bin/k3s kubectl get nodes`
-- Check RBAC: `/usr/local/bin/k3s kubectl get clusterrole,clusterrolebinding`
-- Verify kubeconfig token is valid
-- Review VirtualKubelet logs for pod watch events
+- Confirm node exists: `kubectl get nodes`
+- Check node status: `kubectl describe node interlink-node`
+- Verify RBAC: `kubectl get clusterrole,clusterrolebinding | grep virtual-kubelet`
+- Review VirtualKubelet logs for pod watch events: `kubectl logs -n virtual-kubelet -l app=virtual-kubelet | grep -i pod`
+
+### Helm deployment fails
+
+- Check Helm chart availability: `helm search repo virtual-kubelet`
+- Verify namespace exists: `kubectl get ns virtual-kubelet`
+- Check Helm release status: `helm status vk -n virtual-kubelet`
+- View Helm install output: `helm get values vk -n virtual-kubelet`
 
 ---
 
