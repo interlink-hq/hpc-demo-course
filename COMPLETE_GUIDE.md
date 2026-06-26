@@ -391,6 +391,7 @@ kind: Pod
 metadata:
   name: test-busybox
 spec:
+  automountServiceAccountToken: false
   nodeSelector:
     virtual-node.interlink/type: virtual-kubelet
   tolerations:
@@ -405,7 +406,7 @@ spec:
   - key: node.kubernetes.io/network-unavailable
     operator: Equal
     value: "true"
-    effect: NoSchedule
+    effect: NoExecute
   containers:
   - name: busybox
     image: busybox:latest

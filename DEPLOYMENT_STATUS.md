@@ -109,25 +109,41 @@ To verify the setup works end-to-end:
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # Submit a test pod
-/usr/local/bin/k3s kubectl apply -f - <<'EOF'
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
   name: test-interlink
 spec:
-  nodeName: interlink-node
+  automountServiceAccountToken: false
+  nodeSelector:
+    virtual-node.interlink/type: virtual-kubelet
+  tolerations:
+  - key: virtual-node.interlink/no-schedule
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: node.kubernetes.io/not-ready
+    operator: Equal
+    value: "true"
+    effect: NoExecute
+  - key: node.kubernetes.io/network-unavailable
+    operator: Equal
+    value: "true"
+    effect: NoExecute
   containers:
   - name: hello
-    image: busybox
+    image: busybox:latest
     command: ["echo", "Pod offloaded to SLURM successfully!"]
   restartPolicy: Never
 EOF
 
 # Watch it execute
-/usr/local/bin/k3s kubectl get pod test-interlink -w
+kubectl get pod test-interlink -w
 
-# View logs
-/usr/local/bin/k3s kubectl logs test-interlink
+# View logs (may fail due to TLS, but pod executes successfully)
+kubectl logs test-interlink
 ```
 
 See [Phase 4: Test Pod Offload](phase4-test-offload.md) for comprehensive testing procedures.

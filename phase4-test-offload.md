@@ -4,90 +4,84 @@ Test real pod submission from k3s to SLURM via Interlink bridge.
 
 ## Prerequisites
 
-- Phase 1-3 completed: SLURM on Machine 1, k3s on Machine 2, Interlink API and VirtualKubelet running
+- Phase 1-3 completed: SLURM on Machine 1, k3s on Machine 2, Interlink running
+- VirtualKubelet deployed via Helm to k3s
 - Both services accessible (Interlink API on port 3000, k3s on port 6443)
-- Kubernetes nodes visible from Machine 2
+- Virtual node "interlink-node" visible in Kubernetes
 
 ## Step 1: Verify Setup
 
 Check that all components are running:
 
 ```bash
-# Machine 1: Interlink API
-ssh rocky@192.168.2.170 'ps aux | grep interlink-api | grep -v grep'
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-# Machine 1: SLURM Plugin
-ssh rocky@192.168.2.170 'ps aux | grep slurm-plugin | grep -v grep'
+# Machine 1: Check Interlink API and Plugin
+ssh rocky@192.168.2.170 'ps aux | grep -E "[i]nterlink-api|[s]lurm-plugin"'
 
-# Machine 2: VirtualKubelet  
-ssh rocky@192.168.2.84 'ps aux | grep virtual-kubelet | grep -v grep'
+# Machine 2: Check VirtualKubelet pod
+kubectl get pods -n virtual-kubelet -o wide
+
+# Check virtual node
+kubectl get nodes
 ```
 
-### Check Kubernetes nodes
-
-```bash
-ssh rocky@192.168.2.84 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && /usr/local/bin/k3s kubectl get nodes -o wide'
-```
-
-Expected output:
-```
-NAME                    STATUS     ROLES           VERSION
-interlink-node          NotReady   agent           test
-corso-hpc-2.cloudcnaf   Ready      control-plane   v1.31.4+k3s1
-```
-
-### Check Network Connectivity
-
-```bash
-# Machine 2 can reach Interlink API on Machine 1
-ssh rocky@192.168.2.84 'curl -s http://192.168.2.170:3000/ -I | head -1'
-
-# Expected: HTTP/1.1 response (doesn't need to be 200)
-```
+Expected output shows:
+- Interlink API and SLURM Plugin running on Machine 1
+- VirtualKubelet pod in virtual-kubelet namespace on Machine 2
+- Virtual node "interlink-node" with status Ready
 
 ## Step 2: Monitor Logs Before Testing
 
-Open separate terminals to monitor components:
+Open separate terminals to monitor:
 
 ```bash
 # Terminal 1: Monitor Interlink API on Machine 1
 ssh rocky@192.168.2.170 'tail -f ~/interlink/interlink-api.log'
 
-# Terminal 2: Monitor VirtualKubelet on Machine 2
-ssh rocky@192.168.2.84 'tail -f ~/interlink/vk.log'
-
-# Terminal 3: Monitor k3s on Machine 2
+# Terminal 2: Monitor VirtualKubelet logs
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-/usr/local/bin/k3s kubectl get pods -w
+kubectl logs -n virtual-kubelet -l app=virtual-kubelet -f
+
+# Terminal 3: Monitor k3s pods
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl get pods -w
 ```
 
 ## Step 3: Create Test Pod with Proper Scheduling Constraints
 
-Create a pod scheduled to the Interlink virtual node with proper tolerations:
+Create a pod scheduled to the Interlink virtual node with proper constraints:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # Create and submit test pod
-/usr/local/bin/k3s kubectl apply -f - <<'EOF'
+kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
   name: test-offload
   namespace: default
 spec:
+  automountServiceAccountToken: false
   nodeSelector:
-    kubernetes.io/os: virtual-kubelet
+    virtual-node.interlink/type: virtual-kubelet
   tolerations:
   - key: virtual-node.interlink/no-schedule
-    operator: Exists
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
   - key: node.kubernetes.io/not-ready
-    operator: Exists
+    operator: Equal
+    value: "true"
+    effect: NoExecute
   - key: node.kubernetes.io/network-unavailable
-    operator: Exists
+    operator: Equal
+    value: "true"
+    effect: NoExecute
   containers:
   - name: busybox
-    image: docker://busybox:latest
+    image: busybox:latest
     command: ["/bin/sh", "-c"]
     args: ["echo 'Successfully offloaded to SLURM!'; sleep 10"]
 EOF
@@ -96,8 +90,9 @@ echo "✓ Pod created, checking status..."
 ```
 
 **Why these configurations:**
-- `nodeSelector: kubernetes.io/os: virtual-kubelet` - Matches the Interlink node label
-- `tolerations` - Allows pod to tolerate VirtualKubelet taints (no-schedule, not-ready, network-unavailable)
+- `automountServiceAccountToken: false` - Workaround for token mount limitation
+- `nodeSelector: virtual-node.interlink/type: virtual-kubelet` - Matches Interlink node label
+- `tolerations` with `Equal` and `value: "true"` - Allows pod to tolerate VirtualKubelet taints
 
 ## Step 4: Monitor Pod Status
 
@@ -107,10 +102,10 @@ Watch the pod in real-time:
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # Monitor pod status
-/usr/local/bin/k3s kubectl get pod test-offload -o wide --watch
+kubectl get pod test-offload -o wide --watch
 
 # In another terminal, describe the pod
-/usr/local/bin/k3s kubectl describe pod test-offload
+kubectl describe pod test-offload
 ```
 
 ### Expected Behavior
@@ -118,277 +113,111 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 **Stage 1 - Pod Pending (0-3 seconds):**
 ```
 NAME           READY   STATUS    RESTARTS   AGE   IP       NODE             
-test-offload   0/1     Pending   0          2s    <none>   <none>  
+test-offload   0/1     Pending   0          1s    <none>   <none>
 ```
 
-**Stage 2 - Pod Scheduled & Running (3-8 seconds):**
+**Stage 2 - Pod Running (3-10 seconds):**
 ```
 NAME           READY   STATUS    RESTARTS   AGE   IP          NODE             
-test-offload   1/1     Running   0          5s    127.0.0.1   interlink-node   
+test-offload   0/1     Running   0          5s    127.0.0.1   interlink-node
 ```
 
-At this point, the pod is running on SLURM! The IP 127.0.0.1 is the VirtualKubelet's local address (it's not actually a network pod).
+Note: IP is 127.0.0.1 (local to VirtualKubelet), node is interlink-node (virtual)
 
-**Stage 3 - Pod Completes (8-15 seconds):**
+## Step 5: Verify SLURM Job Creation
+
+On Machine 1, check that SLURM job was created:
+
+```bash
+ssh rocky@192.168.2.170 << 'SLURM_CHECK'
+echo "=== Recent SLURM Jobs ==="
+squeue -u rocky | head -10
+
+echo ""
+echo "=== Job Directories ==="
+ls -lart /tmp/.interlink/ | tail -3
+
+SLURM_CHECK
 ```
-NAME           READY   STATUS      RESTARTS   AGE    IP          NODE             
-test-offload   0/1     Completed   0          12s    127.0.0.1   interlink-node   
-```
 
-## Step 5: Check Pod Logs
+## Step 6: Check Pod Logs
 
-Retrieve logs from the completed pod:
+Try to retrieve pod logs:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-/usr/local/bin/k3s kubectl logs test-offload-pod
+# Check logs
+kubectl logs test-offload
 
-# Expected output:
-# Hello from SLURM job submitted via Interlink
+# If logs fail (TLS issue), check pod output on SLURM side
+ssh rocky@192.168.2.170 'find /tmp/.interlink -name "run-*.out" -type f | xargs tail -20'
 ```
 
-## Step 6: Verify Job in SLURM
+### Expected Output
 
-On Machine 1, check if the job was submitted to SLURM:
-
-```bash
-ssh rocky@192.168.2.170 << 'SLURMCHECK'
-echo "=== Current SLURM Queue ==="
-/home/rocky/slurm-demo/bin/squeue -a
-
-echo ""
-echo "=== Recent Job History ==="
-/home/rocky/slurm-demo/bin/sacct --format=JobID,JobName,State | head -10
-
-echo ""
-echo "=== Interlink API Log (last 10 lines with 'create') ==="
-tail -50 ~/interlink/api.log | grep -i create | tail -5
-
-SLURMCHECK
+From pod logs or SLURM job output:
+```
+Successfully offloaded to SLURM!
 ```
 
-**Expected output - SLURM queue showing completed jobs:**
-```
-JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST
-27843000 default    sbatch  rocky  CD      2s      1 slurm-machine
-```
+## Step 7: Clean Up
 
-**Notes:**
-- Job status `CD` = Completed
-- Job name is usually `sbatch` (the command used to submit)
-- Jobs complete very quickly since they're short-lived pods
-/opt/slurm/bin/squeue --all
-
-echo ""
-echo "=== Job Info (if job ID available) ==="
-# Get most recent job ID
-JID=$(/opt/slurm/bin/squeue --all -h -o "%i" | head -1)
-if [ ! -z "$JID" ]; then
-  /opt/slurm/bin/scontrol show job $JID
-else
-  echo "No recent jobs in queue"
-fi
-
-SLURMCHECK
-```
-
-## Step 7: Test Pod Deletion
-
-Clean up the test pod:
+After testing:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-/usr/local/bin/k3s kubectl delete pod test-offload-pod
+# Delete test pod
+kubectl delete pod test-offload
 
-echo "✓ Pod deleted"
-
-# Verify deletion
-/usr/local/bin/k3s kubectl get pods
+# Cancel SLURM jobs if needed
+ssh rocky@192.168.2.170 'scancel -u rocky'
 ```
-
-## Step 8: Analyze Logs
-
-### Interlink API Logs (Machine 1)
-
-```bash
-ssh rocky@192.168.2.170 << 'APILOGS'
-echo "=== Interlink API Logs ==="
-tail -50 ~/interlink/interlink-api.log | grep -E "error|pod|offload|submitted|status"
-
-APILOGS
-```
-
-Look for messages like:
-- Pod received from VirtualKubelet
-- Job submitted to SLURM
-- Job status updates
-
-### VirtualKubelet Logs (Machine 2)
-
-```bash
-ssh rocky@192.168.2.84 << 'VKLOGS'
-echo "=== VirtualKubelet Logs ==="
-tail -100 ~/interlink/vk.log | grep -E "error|Pod\|offload\|Interlink\|gRPC"
-
-VKLOGS
-```
-
-Look for messages like:
-- Pod watch events
-- Interlink API connection status
-- Pod lifecycle events (Create, Run, Delete)
 
 ## Troubleshooting
 
-### Pod stays in Pending state
+### Pod stuck in Pending
 
-1. **Check node status:**
-   ```bash
-   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-   /usr/local/bin/k3s kubectl describe node interlink-node
-   ```
+**Symptoms:** Pod remains Pending after 30 seconds
 
-2. **Check VirtualKubelet connectivity:**
-   ```bash
-   ssh rocky@192.168.2.84 'tail -50 ~/interlink/vk.log | grep -i "error\|fail\|connect"'
-   ```
+**Debugging:**
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl describe pod test-offload
+```
 
-3. **Check Interlink API:**
-   ```bash
-   ssh rocky@192.168.2.170 'curl -s http://localhost:3000/ | head -20'
-   ```
+Check for:
+- Missing tolerations → Add all three taints
+- Wrong nodeSelector → Use `virtual-node.interlink/type: virtual-kubelet`
+- VirtualKubelet not running → Check `kubectl get pods -n virtual-kubelet`
 
-### Pod shows Running but never completes
+### Pod shows Running but no SLURM job
 
-1. **Check if image pull is failing:**
-   ```bash
-   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-   /usr/local/bin/k3s kubectl describe pod test-offload-pod
-   ```
+**Symptoms:** Pod is Running but no job visible in `squeue`
 
-2. **Verify SLURM job is actually running:**
-   ```bash
-   ssh rocky@192.168.2.170 '/opt/slurm/bin/squeue'
-   ```
+**Debugging:**
+1. Check VirtualKubelet logs: `kubectl logs -n virtual-kubelet -l app=virtual-kubelet`
+2. Check Interlink API logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/interlink-api.log'`
+3. Check SLURM plugin logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/slurm-plugin.log'`
 
-### Network connectivity issues
+### Mount errors in pod output
 
-1. **Test IP connectivity between machines:**
-   ```bash
-   ssh rocky@192.168.2.170 'ping -c 3 192.168.2.84'
-   ssh rocky@192.168.2.84 'ping -c 3 192.168.2.170'
-   ```
+**Symptoms:** Job output shows "WARNING: skipping mount of ... token"
 
-2. **Test port accessibility:**
-   ```bash
-   ssh rocky@192.168.2.84 'curl -v http://192.168.2.170:3000/ 2>&1 | head -20'
-   ```
+**This is expected** with the current VirtualKubelet version. ServiceAccount tokens cannot be exported to SLURM jobs. Workaround: use `automountServiceAccountToken: false` (already in test pod).
 
 ## Success Criteria
 
-✓ Pod is submitted to k3s  
-✓ VirtualKubelet receives pod creation event  
-✓ Pod is translated to SLURM job  
-✓ Job appears in SLURM queue  
-✓ Job completes successfully  
-✓ Pod status reflects job completion  
-✓ Pod logs are accessible in k3s  
+✅ Pod status shows Running on interlink-node  
+✅ SLURM job created and executed  
+✅ Job output shows "Successfully offloaded to SLURM!"  
+✅ Pod can be deleted without errors  
 
-## Advanced Testing
+When all criteria are met, the Interlink bridge is working end-to-end!
 
-### Test with custom container image
+## Next Steps
 
-```bash
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+For production deployment, see [COMPLETE_GUIDE.md](COMPLETE_GUIDE.md) for full setup procedure.
 
-/usr/local/bin/k3s kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Pod
-metadata:
-  name: test-python-pod
-  namespace: default
-spec:
-  nodeName: interlink-node
-  restartPolicy: Never
-  containers:
-  - name: python-container
-    image: python:3.9-slim
-    command:
-    - python
-    - -c
-    - |
-      print("Running Python in SLURM job")
-      import socket
-      print(f"Hostname: {socket.gethostname()}")
-      print("✓ Pod successfully offloaded to SLURM")
-EOF
-```
-
-### Test with resource requests
-
-```bash
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-/usr/local/bin/k3s kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Pod
-metadata:
-  name: test-resources-pod
-  namespace: default
-spec:
-  nodeName: interlink-node
-  restartPolicy: Never
-  containers:
-  - name: test-container
-    image: busybox:latest
-    command: ["echo", "Testing resource requests"]
-    resources:
-      requests:
-        memory: "256Mi"
-        cpu: "100m"
-      limits:
-        memory: "512Mi"
-        cpu: "500m"
-EOF
-```
-
-### Test multiple pods in parallel
-
-```bash
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-for i in {1..3}; do
-  /usr/local/bin/k3s kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: parallel-pod-$i
-  namespace: default
-spec:
-  nodeName: interlink-node
-  restartPolicy: Never
-  containers:
-  - name: worker
-    image: busybox:latest
-    command: ["echo", "Pod $i running in SLURM"]
-EOF
-  echo "✓ Pod $i submitted"
-done
-
-# Monitor all pods
-/usr/local/bin/k3s kubectl get pods -l run=parallel-pod -w
-```
-
----
-
-**Summary:**
-
-This phase validates that the Interlink bridge is working correctly by:
-1. Submitting a pod to the virtual kubelet node
-2. Observing the pod being offloaded to SLURM
-3. Verifying the pod executes and completes
-4. Confirming logs are accessible in Kubernetes
-
-If pods are successfully offloaded and complete, the Interlink SLURM↔Kubernetes bridge is operational.
+For troubleshooting details, see [CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md).
