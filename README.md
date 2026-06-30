@@ -4,16 +4,18 @@
 
 This repository contains step-by-step instructions to deploy a complete Interlink setup bridging two systems:
 
-1. **Machine 1 (SLURM):** 192.168.2.170 - HPC job scheduler
-2. **Machine 2 (k3s):** 192.168.2.84 - Kubernetes cluster
+1. **Machine 1 (SLURM):** $M1_IP - HPC job scheduler
+2. **Machine 2 (k3s):** $M2_IP - Kubernetes cluster
 
 Kubernetes pods scheduled to the virtual node will be automatically offloaded to SLURM jobs.
 
 ## Quick Start
 
-**Start here:** Read **[COMPLETE_GUIDE.md](COMPLETE_GUIDE.md)** for the tested, end-to-end deployment procedure.
+**Start here:** Read **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** for the complete step-by-step deployment procedure.
 
-This is the definitive reference that has been validated on real hardware.
+This is the definitive reference for deploying from scratch on fresh machines.
+
+**Background:** First time? Read [COMPLETE_GUIDE.md](COMPLETE_GUIDE.md) for overview and architecture.
 
 ### Documentation Structure
 
@@ -47,7 +49,7 @@ Pod submitted
 Virtual Node "interlink-node"                                             
    │ (watches for pods)                                                   
    │                                                                       
-   ├─► VirtualKubelet Binary (192.168.2.84)                              
+   ├─► VirtualKubelet Pod ($M2_IP)                              
    │       │                                                              
    │       │ REST/HTTP                                                  
    │       │                                                              
@@ -88,9 +90,9 @@ Pod status updated (Running/Completed)
 
 Test connectivity before starting:
 ```bash
-ping 192.168.2.170          # From Machine 2
-ping 192.168.2.84           # From Machine 1
-curl http://192.168.2.170:3000/  # From Machine 2 (after Phase 3)
+ping $M1_IP          # From Machine 2
+ping $M2_IP           # From Machine 1
+curl http://$M1_IP:3000/  # From Machine 2 (after Phase 3)
 ```
 
 ## Expected Workflow
@@ -180,18 +182,18 @@ See [COMPLETE_GUIDE.md](COMPLETE_GUIDE.md) for detailed step-by-step testing pro
 
 ### Pod stuck in Pending
 1. Verify `interlink-node` exists: `kubectl get nodes`
-2. Check VirtualKubelet running: `ssh rocky@192.168.2.84 'ps aux | grep virtual-kubelet'`
-3. Check logs: `ssh rocky@192.168.2.84 'tail -50 ~/interlink/vk.log'`
+2. Check VirtualKubelet running: `ssh rocky@$M2_IP 'ps aux | grep virtual-kubelet'`
+3. Check logs: `ssh rocky@$M2_IP 'tail -50 ~/interlink/vk.log'`
 
 ### Interlink API not responding
-1. Check if running: `ssh rocky@192.168.2.170 'ps aux | grep interlink-api'`
-2. Check port: `ssh rocky@192.168.2.170 'netstat -tlnp | grep 3000'`
-3. Check logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/interlink-api.log'`
+1. Check if running: `ssh rocky@$M1_IP 'ps aux | grep interlink-api'`
+2. Check port: `ssh rocky@$M1_IP 'netstat -tlnp | grep 3000'`
+3. Check logs: `ssh rocky@$M1_IP 'tail -50 ~/interlink/interlink-api.log'`
 
 ### Network issues between machines
 ```bash
-ssh rocky@192.168.2.170 'ping 192.168.2.84'
-ssh rocky@192.168.2.84 'curl -v http://192.168.2.170:3000/' 2>&1 | head -20
+ssh rocky@$M1_IP 'ping $M2_IP'
+ssh rocky@$M2_IP 'curl -v http://$M1_IP:3000/' 2>&1 | head -20
 ```
 
 ## Learning Objectives
