@@ -14,14 +14,17 @@ See [00-CONFIGURATION.md](00-CONFIGURATION.md) for:
 
 ## Quick Start
 
-Set your machine IPs (edit as needed):
+Set your machine IPs (edit as needed). **Note:** These must be set before each SSH command:
 
 ```bash
-M1_IP="192.168.2.122"      # SLURM machine
-M2_IP="192.168.2.78"       # k3s machine
-M1_HOME="/home/rocky"
-M2_HOME="/home/rocky"
+# Set these at the start of EACH shell session where you'll run commands
+export M1_IP="192.168.2.122"      # SLURM machine
+export M2_IP="192.168.2.78"       # k3s machine
+export M1_HOME="/home/rocky"
+export M2_HOME="/home/rocky"
 ```
+
+**Important:** These variables are used in heredocs (here-documents). They must be exported in the current shell before the SSH commands run, OR use literal paths (no `$` variables).
 
 Then follow these phases in order:
 
@@ -93,44 +96,69 @@ mkdir -p ${M1_HOME}/slurm-demo/etc
 
 # Create slurm.conf
 cat > ${M1_HOME}/slurm-demo/etc/slurm.conf <<'SLURMEOF'
+# SLURM 24.05 configuration for single-node demo
+ClusterName=localhost
 ControlMachine=localhost
 ControlAddr=127.0.0.1
-SlurmctldHost=localhost
+SlurmctldHost=localhost(127.0.0.1)
+
+# Accounting
 AccountingStorageType=accounting_storage/slurmdbd
 AccountingStorageHost=localhost
+AccountingStoragePort=6819
+
+# Job completion
 JobCompType=jobcomp/none
+
+# Nodes and partitions
 NodeName=localhost CPUs=4 RealMemory=8000 State=UNKNOWN
 PartitionName=default Nodes=localhost Default=YES MaxNodes=1
 
-# Paths
+# Paths and files
 SlurmdLogFile=/var/log/slurm/slurmd.log
 SlurmctldLogFile=/var/log/slurm/slurmctld.log
 SlurmdSpoolDir=/var/spool/slurmd
+SlurmdDebug=info
+SlurmctldDebug=info
 
-# Network
-MungeSocketFile=/var/run/munge/munge.socket
+# Security and communication
+MungeSocketFile=/var/run/munge/munge.socket.2
+AuthType=auth/munge
+CryptoType=crypto/munge
+
+# Job processing
+DefMemPerCPU=2000
+MaxMemPerNode=8000
 SLURMEOF
 
-# Create slurmdbd.conf
+# Create slurmdbd.conf (permissions must be 600)
 cat > ${M1_HOME}/slurm-demo/etc/slurmdbd.conf <<'DBEOF'
-ArchiveEvents=yes
-ArchiveJobs=yes
-ArchiveSteps=yes
-ArchiveSuspend=yes
-AuthType=auth/munge
+# Database
 DbDriver=mysql
 DbHost=localhost
 DbName=slurm_acct_db
 DbUser=slurm
+DbPass=password
 DbPort=3306
-DebugLevel=4
-ProctrackType=proctrack/linux
+
+# Logging
+DebugLevel=debug
 LogFile=/var/log/slurm/slurmdbd.log
-PidFile=/var/run/slurmdbd.pid
-SlurmUser=slurm
+
+# Authorization
+AuthType=auth/munge
+AuthInfo=creds_p=/var/run/munge/munge.socket.2
+
+# Process
+ProctrackType=proctrack/linux
+SlurmUser=rocky
 DBEOF
 
-echo "✓ Configurations created"
+# Fix permissions (CRITICAL - must be 600)
+chmod 600 ${M1_HOME}/slurm-demo/etc/slurmdbd.conf
+chmod 600 ${M1_HOME}/slurm-demo/etc/slurm.conf
+
+echo "✓ Configurations created with correct permissions"
 ```
 
 ### 1.4 Setup Database
@@ -158,34 +186,59 @@ echo "export PATH=${M1_HOME}/slurm-demo/bin:${M1_HOME}/slurm-demo/sbin:\$PATH" >
 # Add to PATH for this session
 export PATH=${M1_HOME}/slurm-demo/bin:${M1_HOME}/slurm-demo/sbin:$PATH
 
-# Start SlurmDBD
+# Ensure log directory exists and has proper permissions
+sudo mkdir -p /var/log/slurm /var/spool/slurmd
+sudo chmod 755 /var/log/slurm /var/spool/slurmd
+sudo chown $(whoami):$(whoami) /var/log/slurm /var/spool/slurmd
+
+# Start SlurmDBD (database backend - must start first)
+echo "Starting SlurmDBD..."
 nohup ${M1_HOME}/slurm-demo/sbin/slurmdbd \
   -f ${M1_HOME}/slurm-demo/etc/slurmdbd.conf \
   > /var/log/slurm/slurmdbd.log 2>&1 &
-sleep 3
+sleep 5
 
-# Add cluster and account
-${M1_HOME}/slurm-demo/bin/sacctmgr add cluster localhost
-${M1_HOME}/slurm-demo/bin/sacctmgr add account default Cluster=localhost
+# Verify database is ready
+echo "Waiting for database to initialize..."
+for i in {1..10}; do
+  if ${M1_HOME}/slurm-demo/bin/sacctmgr list cluster 2>/dev/null; then
+    echo "✓ Database ready"
+    break
+  fi
+  sleep 1
+done
 
-# Start Slurmctld
+# Add cluster to accounting
+${M1_HOME}/slurm-demo/bin/sacctmgr add cluster localhost -i 2>/dev/null || true
+${M1_HOME}/slurm-demo/bin/sacctmgr add account default Cluster=localhost -i 2>/dev/null || true
+
+# Start Slurmctld (control daemon)
+echo "Starting Slurmctld..."
 nohup ${M1_HOME}/slurm-demo/sbin/slurmctld \
   -f ${M1_HOME}/slurm-demo/etc/slurm.conf \
+  -D \
   > /var/log/slurm/slurmctld.log 2>&1 &
 sleep 3
 
-# Start Slurmd
+# Start Slurmd (compute daemon)
+echo "Starting Slurmd..."
 nohup ${M1_HOME}/slurm-demo/sbin/slurmd \
   -f ${M1_HOME}/slurm-demo/etc/slurm.conf \
+  -D \
   > /var/log/slurm/slurmd.log 2>&1 &
 sleep 3
 
-# Verify
+# Verify all are running
 echo "=== SLURM Status ==="
 sinfo
 echo ""
 echo "=== Running Processes ==="
 ps aux | grep -E '[s]lurmctld|[s]lurmd|[s]lurmdbd' | grep -v grep
+
+echo ""
+echo "=== Check for Errors ==="
+tail -5 /var/log/slurm/slurmdbd.log
+tail -5 /var/log/slurm/slurmctld.log
 ```
 
 ### 1.6 Test SLURM
@@ -254,57 +307,69 @@ helm version
 ### 3.1 Download Interlink Binaries
 
 ```bash
-ssh rocky@${M1_IP}
+ssh rocky@${M1_IP} << 'M1SETUP'
 
 # Set version and create directory
 VER="0.6.1-patch1"
-BASE="https://github.com/interlink-hq/interLink/releases/download/$VER"
+BASE="https://github.com/interlink-hq/interlink/releases/download/$VER"
 
-mkdir -p ${M1_HOME}/interlink
-cd ${M1_HOME}/interlink
+# Separate release for SLURM plugin
+PLUGIN_BASE="https://github.com/interlink-hq/interlink-slurm-plugin/releases/download/$VER"
+
+mkdir -p ~/interlink
+cd ~/interlink
 
 # Download Interlink API binary
 echo "Downloading Interlink API..."
 curl -sL "${BASE}/interlink_Linux_x86_64" -o interlink-api && chmod +x interlink-api
 
-# Download SLURM plugin binary (this is the separate plugin release)
+# Download SLURM plugin binary (from separate interlink-slurm-plugin repo)
 echo "Downloading SLURM Plugin..."
-curl -sL "${BASE}/interlink-slurm-plugin_Linux_x86_64" -o slurm-plugin && chmod +x slurm-plugin
+curl -sL "${PLUGIN_BASE}/interlink-sidecar-slurm_Linux_x86_64" -o slurm-plugin && chmod +x slurm-plugin
 
-echo "✓ All binaries downloaded"
-ls -lh interlink-api slurm-plugin
+# Verify downloads
+if [ -f interlink-api ] && [ -f slurm-plugin ]; then
+  echo "✓ All binaries downloaded successfully"
+  ls -lh interlink-api slurm-plugin
+else
+  echo "✗ Download failed - check URLs above"
+  exit 1
+fi
+
+M1SETUP
 ```
 
 ### 3.2 Configure Interlink
 
 ```bash
-cd ${M1_HOME}/interlink
+ssh rocky@${M1_IP} << 'M1CONFIG'
 
-# Create API configuration
-cat > interlink-config.yaml <<'APIEOF'
+cd ~/interlink
+
+# Create API configuration (unquoted heredoc to expand variables)
+cat > interlink-config.yaml <<APIEOF
 InterlinkAddress: "http://0.0.0.0"
 InterlinkPort: "3000"
 SidecarURL: "http://192.168.2.122"
 SidecarPort: "4000"
 VerboseLogging: true
 ErrorsOnlyLogging: false
-DataRootFolder: "${M1_HOME}/.interlink-api"
+DataRootFolder: "/home/rocky/.interlink-api"
 APIEOF
 
-# Create SLURM Plugin configuration
-export PATH=${M1_HOME}/slurm-demo/bin:${M1_HOME}/slurm-demo/sbin:$PATH
-cat > SlurmConfig.yaml <<'PLUGINEOF'
+# Create SLURM Plugin configuration (unquoted heredoc to expand variables)
+cat > SlurmConfig.yaml <<PLUGINEOF
 InterlinkURL: "http://192.168.2.122"
 InterlinkPort: "3000"
 SidecarURL: "http://0.0.0.0"
 SidecarPort: "4000"
 VerboseLogging: true
 ErrorsOnlyLogging: false
-DataRootFolder: "${M1_HOME}/.interlink"
+DataRootFolder: "/home/rocky/.interlink"
 ExportPodData: true
-SbatchPath: "${M1_HOME}/slurm-demo/bin/sbatch"
-ScancelPath: "${M1_HOME}/slurm-demo/bin/scancel"
-SqueuePath: "${M1_HOME}/slurm-demo/bin/squeue"
+SbatchPath: "/home/rocky/slurm-demo/bin/sbatch"
+ScancelPath: "/home/rocky/slurm-demo/bin/scancel"
+SqueuePath: "/home/rocky/slurm-demo/bin/squeue"
 CommandPrefix: ""
 SingularityPrefix: "/usr/bin/apptainer"
 ImagePrefix: "docker://"
@@ -315,77 +380,95 @@ EnableProbes: true
 PLUGINEOF
 
 echo "✓ Configurations created"
+ls -la *.yaml
+
+M1CONFIG
 ```
+
+**Note:** The configs use literal IP `192.168.2.122` and paths. If your IPs differ, edit the configs after creation or use `sed` to replace them.
 
 ### 3.3 Start Interlink Services
 
 ```bash
-cd ${M1_HOME}/interlink
+ssh rocky@${M1_IP} << 'M1START'
+
+cd ~/interlink
 
 # Kill any old processes
 pkill -f interlink-api || true
 pkill -f slurm-plugin || true
 sleep 2
 
-# Start SLURM plugin FIRST
+# Export PATH for SLURM commands
+export PATH=/home/rocky/slurm-demo/bin:/home/rocky/slurm-demo/sbin:$PATH
+
+# Start SLURM plugin FIRST (listens on port 4000)
 export SLURMCONFIGPATH=$(pwd)/SlurmConfig.yaml
-export PATH=${M1_HOME}/slurm-demo/bin:${M1_HOME}/slurm-demo/sbin:$PATH
 
 echo "Starting SLURM plugin..."
 nohup ./slurm-plugin > slurm-plugin.log 2>&1 &
 sleep 3
 
-# Then start Interlink API
+# Then start Interlink API (listens on port 3000)
 export INTERLINKCONFIGPATH=$(pwd)/interlink-config.yaml
 
 echo "Starting Interlink API..."
 nohup ./interlink-api > interlink-api.log 2>&1 &
 sleep 3
 
-# Verify
+# Verify both are running
 echo "=== Process Status ==="
 ps aux | grep -E '[i]nterlink-api|[s]lurm-plugin' | grep -v grep
 
 echo ""
 echo "=== Port Status ==="
-ss -tlnp | grep -E ":3000|:4000"
+netstat -tlnp 2>/dev/null | grep -E ":3000|:4000" || ss -tlnp 2>/dev/null | grep -E ":3000|:4000"
 
 echo ""
-echo "=== API Health Check ==="
-curl -s -I http://localhost:3000/ | head -3
+echo "=== Interlink API Startup (check logs) ==="
+tail -10 interlink-api.log
 
 echo ""
-echo "=== Recent Logs ==="
-tail -5 interlink-api.log
+echo "=== SLURM Plugin Startup ==="
+tail -10 slurm-plugin.log
+
+M1START
 ```
+
+**Verify:** Both services should now be running. Check logs for any errors. The Interlink API initializes on startup, and the SLURM plugin connects to it.
 
 ---
 
 ## Phase 4: VirtualKubelet Setup via Helm (Machine 2)
 
 ```bash
-ssh rocky@${M2_IP}
+ssh rocky@${M2_IP} << 'M2VK'
+
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # Create namespace
 kubectl create namespace virtual-kubelet || true
 
-# Deploy VirtualKubelet via Helm (with auth workaround for GHCR)
-echo "Deploying VirtualKubelet via Helm..."
-helm upgrade --install vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
+# Try to deploy VirtualKubelet via Helm from OCI registry
+echo "Attempting to deploy VirtualKubelet via Helm..."
+if helm upgrade --install vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
   --namespace virtual-kubelet \
   --set nodeName=interlink-node \
   --set provider=interlink \
   --set logs.level=info \
   --set interlink.url=http://192.168.2.122 \
   --set interlink.port=3000 \
-  --wait
+  --wait 2>&1 | grep -i "403\|denied\|unauthorized"; then
+  
+  echo "✗ GHCR access failed (403 Forbidden)"
+  echo ""
+  echo "Workaround: Using binary VirtualKubelet instead"
+  echo "Download and install binary from: https://github.com/virtual-kubelet/virtual-kubelet/releases"
+  echo "Then restart and re-run this phase"
+  exit 1
+fi
 
-# If GHCR access fails (403), use this workaround:
-# helm upgrade --install vk ./virtual-kubelet-chart \
-#   (after downloading the chart locally)
-
-echo "✓ VirtualKubelet deployed"
+echo "✓ VirtualKubelet deployed via Helm"
 
 # Verify deployment
 echo ""
@@ -399,15 +482,23 @@ kubectl get nodes
 echo ""
 echo "=== VirtualKubelet Logs ==="
 kubectl logs -n virtual-kubelet -l app=virtual-kubelet --tail=20
+
+M2VK
 ```
+
+**Note:** If GHCR (GitHub Container Registry) returns 403 Forbidden:
+1. This is an authentication issue - GHCR requires login for some images
+2. Workaround: Deploy binary VirtualKubelet instead (see DEPLOYMENT_METHODS.md)
 
 ---
 
 ## Phase 5: Test End-to-End
 
 ```bash
-ssh rocky@${M2_IP}
+ssh rocky@${M2_IP} << 'M2TEST'
+
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+M1_IP="192.168.2.122"
 
 # Create test pod
 cat > /tmp/test-offload.yaml <<'PODEOF'
@@ -445,25 +536,44 @@ spec:
 PODEOF
 
 # Submit pod
+echo "Submitting test pod..."
 kubectl apply -f /tmp/test-offload.yaml
 
-# Watch pod status
-echo "=== Pod Status ==="
-kubectl get pod test-offload -w
+# Wait for pod to complete
+echo "=== Watching Pod Status (Ctrl+C to stop watching) ==="
+timeout 60 kubectl get pod test-offload -w || true
 
-# After pod completes, check SLURM job on Machine 1
 echo ""
-echo "=== SLURM Job on Machine 1 ==="
-ssh rocky@${M1_IP} "export PATH=~/slurm-demo/bin:~/slurm-demo/sbin:\$PATH; squeue; echo ''; sacct"
+echo "=== Final Pod Status ==="
+kubectl get pod test-offload
 
 # Check pod logs
 echo ""
 echo "=== Pod Logs ==="
-kubectl logs test-offload
+kubectl logs test-offload 2>/dev/null || echo "(Logs not yet available)"
+
+# Check SLURM job on Machine 1
+echo ""
+echo "=== SLURM Job on Machine 1 (via SSH) ==="
+ssh rocky@${M1_IP} << 'M1SQUEUE'
+export PATH=/home/rocky/slurm-demo/bin:/home/rocky/slurm-demo/sbin:$PATH
+echo "Recent jobs:"
+squeue
+echo ""
+echo "Job accounting:"
+sacct | tail -5
+M1SQUEUE
 
 echo ""
 echo "✓ End-to-end test complete!"
+
+M2TEST
 ```
+
+**Expected Output:**
+- Pod shows as Running on interlink-node
+- Pod shows output: "Pod offloaded to SLURM!"
+- SLURM job visible on Machine 1 with JobState=COMPLETED
 
 ---
 
