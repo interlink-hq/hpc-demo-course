@@ -23,12 +23,17 @@ Use pre-built binaries from [Interlink releases](https://github.com/interlink-hq
 ssh rocky@192.168.2.170 << 'M1SETUP'
 VER="0.6.1-patch1"
 BASE="https://github.com/interlink-hq/interLink/releases/download/$VER"
+SLURM_VER="0.6.1"
+SLURM_BASE="https://github.com/interlink-hq/interlink-slurm-plugin/releases/download/$SLURM_VER"
 
 mkdir -p ~/interlink
 cd ~/interlink
 
 # Download Interlink API binary
 curl -sL "$BASE/interlink_Linux_x86_64" -o interlink-api && chmod +x interlink-api
+
+# Download SLURM Plugin binary
+curl -sL "$SLURM_BASE/interlink-sidecar-slurm_Linux_x86_64" -o slurm-plugin && chmod +x slurm-plugin
 
 M1SETUP
 ```
