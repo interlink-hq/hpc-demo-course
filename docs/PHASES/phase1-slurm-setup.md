@@ -2,8 +2,6 @@
 
 Set up SLURM on the HPC machine. This will be the backend that Interlink connects to.
 
-**Before starting:** Read [00-CONFIGURATION.md](00-CONFIGURATION.md) to set up IP variables and prerequisites.
-
 ## Install SLURM
 
 ```bash
@@ -199,6 +197,7 @@ apptainer run docker://busybox echo "Apptainer is working!"
 ```
 
 **Important Notes:**
+
 - Apptainer must be available on the machine where the SLURM plugin runs
 - The plugin is configured with `SingularityPrefix: /usr/bin/apptainer` in the SlurmConfig.yaml
 - Without Apptainer, pod execution will fail when Interlink tries to create containers

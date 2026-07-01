@@ -27,6 +27,7 @@ kubectl get nodes
 ```
 
 Expected output shows:
+
 - Interlink API and SLURM Plugin running on Machine 1
 - VirtualKubelet pod in virtual-kubelet namespace on Machine 2
 - Virtual node "interlink-node" with status Ready
@@ -83,13 +84,14 @@ spec:
   - name: busybox
     image: busybox:latest
     command: ["/bin/sh", "-c"]
-    args: ["echo 'Successfully offloaded to SLURM!'; sleep 10"]
+    args: ["echo 'Successfully offloaded to SLURM! Sleeping 5 minutes now!'; sleep 300"]
 EOF
 
 echo "✓ Pod created, checking status..."
 ```
 
 **Why these configurations:**
+
 - `automountServiceAccountToken: false` - Workaround for token mount limitation
 - `nodeSelector: virtual-node.interlink/type: virtual-kubelet` - Matches Interlink node label
 - `tolerations` with `Equal` and `value: "true"` - Allows pod to tolerate VirtualKubelet taints
@@ -111,14 +113,16 @@ kubectl describe pod test-offload
 ### Expected Behavior
 
 **Stage 1 - Pod Pending (0-3 seconds):**
+
 ```
-NAME           READY   STATUS    RESTARTS   AGE   IP       NODE             
+NAME           READY   STATUS    RESTARTS   AGE   IP       NODE
 test-offload   0/1     Pending   0          1s    <none>   <none>
 ```
 
 **Stage 2 - Pod Running (3-10 seconds):**
+
 ```
-NAME           READY   STATUS    RESTARTS   AGE   IP          NODE             
+NAME           READY   STATUS    RESTARTS   AGE   IP          NODE
 test-offload   0/1     Running   0          5s    127.0.0.1   interlink-node
 ```
 
@@ -157,22 +161,9 @@ ssh rocky@192.168.2.170 'find /tmp/.interlink -name "run-*.out" -type f | xargs 
 ### Expected Output
 
 From pod logs or SLURM job output:
+
 ```
 Successfully offloaded to SLURM!
-```
-
-## Step 7: Clean Up
-
-After testing:
-
-```bash
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-# Delete test pod
-kubectl delete pod test-offload
-
-# Cancel SLURM jobs if needed
-ssh rocky@192.168.2.170 'scancel -u rocky'
 ```
 
 ## Troubleshooting
@@ -182,12 +173,14 @@ ssh rocky@192.168.2.170 'scancel -u rocky'
 **Symptoms:** Pod remains Pending after 30 seconds
 
 **Debugging:**
+
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 kubectl describe pod test-offload
 ```
 
 Check for:
+
 - Missing tolerations → Add all three taints
 - Wrong nodeSelector → Use `virtual-node.interlink/type: virtual-kubelet`
 - VirtualKubelet not running → Check `kubectl get pods -n virtual-kubelet`
@@ -197,6 +190,7 @@ Check for:
 **Symptoms:** Pod is Running but no job visible in `squeue`
 
 **Debugging:**
+
 1. Check VirtualKubelet logs: `kubectl logs -n virtual-kubelet -l app=virtual-kubelet`
 2. Check Interlink API logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/interlink-api.log'`
 3. Check SLURM plugin logs: `ssh rocky@192.168.2.170 'tail -50 ~/interlink/slurm-plugin.log'`
@@ -212,12 +206,6 @@ Check for:
 ✅ Pod status shows Running on interlink-node  
 ✅ SLURM job created and executed  
 ✅ Job output shows "Successfully offloaded to SLURM!"  
-✅ Pod can be deleted without errors  
+✅ Pod can be deleted without errors
 
 When all criteria are met, the Interlink bridge is working end-to-end!
-
-## Next Steps
-
-For production deployment, see [COMPLETE_GUIDE.md](COMPLETE_GUIDE.md) for full setup procedure.
-
-For troubleshooting details, see [CRITICAL_FINDINGS.md](CRITICAL_FINDINGS.md).

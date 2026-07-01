@@ -30,11 +30,6 @@ cd ~/interlink
 # Download Interlink API binary
 curl -sL "$BASE/interlink_Linux_x86_64" -o interlink-api && chmod +x interlink-api
 
-# Download SSH tunnel binary (optional, for remote connections)
-curl -sL "$BASE/ssh-tunnel_Linux_x86_64" -o ssh-tunnel && chmod +x ssh-tunnel
-
-echo "✓ Binaries downloaded"
-ls -lh interlink-api ssh-tunnel
 M1SETUP
 ```
 
@@ -135,11 +130,13 @@ START_API
 ```
 
 **Verify API is running:**
+
 ```bash
 ssh rocky@192.168.2.170 "curl -s -I http://localhost:3000/ | head -3"
 ```
 
 Expected output:
+
 ```
 HTTP/1.1 404 Not Found
 Content-Type: text/plain; charset=utf-8
@@ -174,11 +171,13 @@ START_PLUGIN
 ```
 
 **Verify both are running:**
+
 ```bash
 ssh rocky@192.168.2.170 "ps aux | grep -E '[i]nterlink-api|[s]lurm-plugin' | grep -v grep"
 ```
 
 Expected output:
+
 ```
 rocky    77429  0.3  0.4 1810088 33728 ?  Sl  15:31   0:00 ./slurm-plugin
 rocky    77436  1.3  0.4 1303460 38648 ?  Sl  15:31   0:00 ./interlink-api
@@ -219,6 +218,7 @@ HELM_DEPLOY
 ```
 
 Expected output:
+
 ```
 NAME                                    READY   STATUS    RESTARTS   AGE
 vk-virtual-kubelet-XXXXXXXXXX-XXXXX    1/1     Running   0          10s
@@ -255,6 +255,7 @@ VERIFY_VK
 ```
 
 Expected output:
+
 ```
 NAME                    STATUS   ROLES           VERSION
 interlink-node          Ready    agent           test
@@ -279,13 +280,13 @@ ssh rocky@192.168.2.84 'tail -20 ~/interlink/vk.log | grep -E "error|warn|Pod\|I
 
 ## Summary of Deployed Components
 
-| Component | Machine | Port | Deployment Method | Config |
-|-----------|---------|------|-------------------|--------|
-| Interlink API | 1 | 3000 | Binary (~/interlink/interlink-api) | interlink-config.yaml |
-| SLURM Plugin | 1 | 4000 | Binary (~/interlink/slurm-plugin) | SlurmConfig.yaml |
-| VirtualKubelet | 2 | - | Helm Chart (virtual-kubelet/virtual-kubelet) | Helm values |
-| k3s | 2 | 6443 | k3s cluster | /etc/rancher/k3s/k3s.yaml |
-| SLURM | 1 | - | /opt/slurm/bin/* | - |
+| Component      | Machine | Port | Deployment Method                            | Config                    |
+| -------------- | ------- | ---- | -------------------------------------------- | ------------------------- |
+| Interlink API  | 1       | 3000 | Binary (~/interlink/interlink-api)           | interlink-config.yaml     |
+| SLURM Plugin   | 1       | 4000 | Binary (~/interlink/slurm-plugin)            | SlurmConfig.yaml          |
+| VirtualKubelet | 2       | -    | Helm Chart (virtual-kubelet/virtual-kubelet) | Helm values               |
+| k3s            | 2       | 6443 | k3s cluster                                  | /etc/rancher/k3s/k3s.yaml |
+| SLURM          | 1       | -    | /opt/slurm/bin/\*                            | -                         |
 
 ## Common Commands
 
@@ -359,6 +360,7 @@ helm status vk -n virtual-kubelet
 ### Helm Values for Advanced Customization
 
 **Customize VirtualKubelet deployment with Helm values:**
+
 ```bash
 # Example: Different log level, custom resource limits
 helm upgrade vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
@@ -373,16 +375,19 @@ helm upgrade vk oci://ghcr.io/virtual-kubelet/virtual-kubelet \
 ```
 
 **Full values reference:**
+
 - View all available values: `helm show values oci://ghcr.io/virtual-kubelet/virtual-kubelet`
 - Current deployment: `helm get values vk -n virtual-kubelet`
 
 **Official chart documentation:**
-- https://github.com/virtual-kubelet/virtual-kubelet/tree/master/charts
-- https://github.com/virtual-kubelet/virtual-kubelet/blob/master/charts/virtual-kubelet/README.md
+
+- <https://github.com/virtual-kubelet/virtual-kubelet/tree/master/charts>
+- <https://github.com/virtual-kubelet/virtual-kubelet/blob/master/charts/virtual-kubelet/README.md>
 
 ### RBAC & Authentication
 
 **Kubernetes RBAC (Automatically Created):**
+
 ```bash
 # Verify auto-created RBAC resources
 kubectl get serviceaccount -n virtual-kubelet
@@ -391,50 +396,37 @@ kubectl get clusterrolebinding | grep virtual-kubelet
 ```
 
 **Service Account Token Access:**
+
 - To enable tokens in SLURM containers: add hostPath volume mount to VirtualKubelet pod (see VOLUME_MOUNT_LIMITATION.md)
 - Alternative: Use `automountServiceAccountToken: false` if Kubernetes API access not needed
 - Reference: [VOLUME_MOUNT_LIMITATION.md](VOLUME_MOUNT_LIMITATION.md)
 
 **Official RBAC Documentation:**
-- https://kubernetes.io/docs/reference/access-authn-authz/rbac/
-- https://kubernetes.io/docs/concepts/security/service-accounts/
+
+- <https://kubernetes.io/docs/reference/access-authn-authz/rbac/>
+- <https://kubernetes.io/docs/concepts/security/service-accounts/>
 
 ### Interlink Configuration Files
 
 **SlurmConfig.yaml (Machine 1):**
+
 - Location: `/opt/interlink/interlink/SlurmConfig.yaml`
 - Controls SLURM job parameters (partition, account, timeout)
-- Reference: https://github.com/interlink-hq/interlink/blob/main/docs/SlurmConfig.md
+- Reference: <https://github.com/interlink-hq/interlink/blob/main/docs/SlurmConfig.md>
 
 **VirtualKubelet Configuration (Machine 2):**
+
 - No manual ConfigMap required (Helm handles it)
 - Configuration passed via `--set` flags
 - View: `helm get values vk -n virtual-kubelet`
 
 **Key Configuration Parameters:**
+
 - `interlink.url`: Interlink API address (must use IP, not localhost)
 - `interlink.port`: Interlink API port (default: 3000)
 - `provider`: Must be set to `interlink`
 - `nodeName`: Virtual node name visible in k3s
 
-### Official Project References
-
-**VirtualKubelet:**
-- GitHub: https://github.com/virtual-kubelet/virtual-kubelet
-- Docs: https://virtual-kubelet.io/docs/
-- Troubleshooting: https://virtual-kubelet.io/docs/troubleshooting/
-
-**Interlink HPC:**
-- GitHub: https://github.com/interlink-hq/interlink
-- Docs: https://interlink.almalinux.org/docs/
-- SLURM Plugin: https://github.com/interlink-hq/interlink/blob/main/plugins/SLURM.md
-
-**Kubernetes & Helm:**
-- Helm: https://helm.sh/docs/
-- k3s: https://docs.k3s.io/
-- Custom Schedulers: https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/
-
 ---
 
 Next: [Phase 4: Test Pod Offload](phase4-test-offload.md)
-

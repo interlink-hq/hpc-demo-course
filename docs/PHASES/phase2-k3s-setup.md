@@ -37,32 +37,6 @@ The `--egress-selector-mode=disabled` flag is **essential** for Interlink pod lo
 
 This is configured automatically when you run the installation command above.
 
-## Install Go (needed to build VirtualKubelet)
-
-```bash
-# Install Go 1.26+
-wget https://go.dev/dl/go1.26.0.linux-amd64.tar.gz
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.26.0.linux-amd64.tar.gz
-
-# Add to PATH
-echo 'export PATH=/usr/local/go/bin:$PATH' | sudo tee -a /etc/profile.d/go.sh
-source /etc/profile.d/go.sh
-
-go version
-```
-
-## Install Docker (needed for building Interlink images)
-
-```bash
-sudo dnf install -y docker
-sudo systemctl start docker
-sudo usermod -aG docker rocky
-
-# Test
-docker --version
-```
-
 ---
 
 Next: [Phase 3: Interlink Setup](phase3-interlink-setup.md)
