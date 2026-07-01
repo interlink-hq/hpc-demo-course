@@ -183,8 +183,6 @@ ssh rocky@$M1_IP 'ping $M2_IP'
 ssh rocky@$M2_IP 'curl -v http://$M1_IP:3000/' 2>&1 | head -20
 ```
 
-See [CLEANUP.md](CLEANUP.md) for more troubleshooting options.
-
 ## Learning Objectives
 
 By completing this course, you'll understand:
