@@ -4,22 +4,26 @@
 
 This repository contains step-by-step instructions to deploy a complete Interlink setup bridging two systems:
 
-1. **Machine 1 (SLURM):** $M1_IP - HPC job scheduler
-2. **Machine 2 (k3s):** $M2_IP - Kubernetes cluster
+1. **Machine 122 (SLURM):** 192.168.2.122 - HPC backend with SLURM + Interlink
+2. **Machine 78 (k3s):** 192.168.2.78 - Kubernetes cluster with VirtualKubelet
 
-Kubernetes pods scheduled to the virtual node will be automatically offloaded to SLURM jobs.
+Kubernetes pods scheduled to the virtual node will be automatically offloaded to SLURM jobs on the HPC backend.
 
 ## Documentation Structure
 
 ```
 hpc-course/
 ├── README.md                              # This file (start here)
-├── docs/PHASES/                           # Phase-by-phase learning path
-│   ├── phase1-slurm-setup.md             # Detailed SLURM installation
-│   ├── phase2-k3s-setup.md               # Detailed k3s installation
-│   ├── phase3-interlink-setup.md         # Detailed Interlink setup
-│   ├── phase4-test-offload.md            # Detailed testing procedures
+├── docs/
+│   ├── FINAL-SETUP-GUIDE.md              # ✅ CURRENT WORKING SETUP (start here!)
+│   ├── PHASES/                           # Phase-by-phase learning path
+│   │   ├── phase1-slurm-setup.md         # Detailed SLURM installation
+│   │   ├── phase2-k3s-setup.md           # Detailed k3s installation
+│   │   ├── phase3-interlink-setup.md     # Detailed Interlink setup
+│   │   └── phase4-test-offload.md        # Detailed testing procedures
 ```
+
+**➡️ Start here:** [`docs/FINAL-SETUP-GUIDE.md`](docs/FINAL-SETUP-GUIDE.md)
 
 ## Architecture Overview
 
@@ -65,17 +69,19 @@ Pod completes on SLURM backend
 
 ## Network Requirements
 
-- **Connectivity:** Machine 2 must reach Machine 1 on port 3000
+- **Connectivity:** Machine 78 must reach Machine 122 on port 3000 (Interlink API)
 - **SSH Keys:** Key-based SSH between machines (for remote commands)
-- **Subnet:** 192.168.2.0/24 (adjust if different)
+- **Subnet:** 192.168.2.0/24
 
 Test connectivity before starting:
 
 ```bash
-ping $M1_IP          # From Machine 2
-ping $M2_IP           # From Machine 1
-curl http://$M1_IP:3000/  # From Machine 2 (after Phase 3)
+ping 192.168.2.122          # From Machine 78
+ping 192.168.2.78           # From Machine 122
+curl http://192.168.2.122:3000/  # From Machine 78 (after setup)
 ```
+
+**Current Status:** ✅ All connectivity verified
 
 ## Expected Workflow
 
@@ -116,29 +122,14 @@ After completing deployment, test with:
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-# Submit test pod with proper constraints
+# Submit test pod targeting interlink-node
 kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
   name: hello-slurm
 spec:
-  automountServiceAccountToken: false
-  nodeSelector:
-    virtual-node.interlink/type: virtual-kubelet
-  tolerations:
-  - key: virtual-node.interlink/no-schedule
-    operator: Equal
-    value: "true"
-    effect: NoSchedule
-  - key: node.kubernetes.io/not-ready
-    operator: Equal
-    value: "true"
-    effect: NoExecute
-  - key: node.kubernetes.io/network-unavailable
-    operator: Equal
-    value: "true"
-    effect: NoExecute
+  nodeName: interlink-node
   containers:
   - name: app
     image: busybox:latest
@@ -152,36 +143,65 @@ kubectl get pod hello-slurm -w
 
 # Check logs
 kubectl logs hello-slurm
+
+# Check SLURM job on Machine 122
+ssh rocky@192.168.2.122 '/home/rocky/slurm-demo/bin/squeue'
 ```
 
-Expected output:
-
-```
-Pod shows as Running on interlink-node
-Output: "Hello from SLURM!" followed by sleep
-SLURM job visible on Machine 1
-```
+**Expected Output:**
+- Pod shows as Running/Completed on interlink-node
+- Output: "Hello from SLURM!" 
+- SLURM job visible in queue
+- Job output file created at `/home/rocky/slurm-*.out`
 
 ## Troubleshooting Quick Reference
+
+### Verify Services are Running
+
+**Machine 122 - SLURM:**
+```bash
+ssh rocky@192.168.2.122
+/home/rocky/slurm-demo/bin/sinfo
+# Expected: demo partition with localhost in idle state
+```
+
+**Machine 122 - Interlink:**
+```bash
+ssh rocky@192.168.2.122
+ps aux | grep -E 'interlink-api|slurm-plugin'
+curl -I http://localhost:3000/
+# Expected: HTTP/1.1 404 (API is responding)
+```
+
+**Machine 78 - VirtualKubelet:**
+```bash
+ssh rocky@192.168.2.78
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl get pods -n virtual-kubelet
+# Expected: virtual-kubelet pod in Running state
+```
 
 ### Pod stuck in Pending
 
 1. Verify `interlink-node` exists: `kubectl get nodes`
-2. Check VirtualKubelet running: `ssh rocky@$M2_IP 'kubectl get pods -n virtual-kubelet'`
-3. Check logs: `ssh rocky@$M2_IP 'kubectl logs -n virtual-kubelet -l app=virtual-kubelet'`
+2. Check VirtualKubelet pod: `kubectl get pods -n virtual-kubelet`
+3. Check logs: `kubectl logs -n virtual-kubelet -l app=virtual-kubelet`
 
 ### Interlink API not responding
 
-1. Check if running: `ssh rocky@$M1_IP 'ps aux | grep interlink-api'`
-2. Check port: `ssh rocky@$M1_IP 'netstat -tlnp | grep 3000'`
-3. Check logs: `ssh rocky@$M1_IP 'tail -50 ~/interlink/interlink-api.log'`
+1. Check if running: `ssh rocky@192.168.2.122 'ps aux | grep interlink-api'`
+2. Check port: `ssh rocky@192.168.2.122 'netstat -tlnp | grep 3000'`
+3. Check logs: `ssh rocky@192.168.2.122 'tail -50 ~/interlink/interlink-api.log'`
 
 ### Network issues between machines
 
 ```bash
-ssh rocky@$M1_IP 'ping $M2_IP'
-ssh rocky@$M2_IP 'curl -v http://$M1_IP:3000/' 2>&1 | head -20
+# From Machine 78
+ssh rocky@192.168.2.78 "ping 192.168.2.122"
+ssh rocky@192.168.2.78 "curl -I http://192.168.2.122:3000/"
 ```
+
+**For complete troubleshooting, see [`docs/FINAL-SETUP-GUIDE.md`](docs/FINAL-SETUP-GUIDE.md#-troubleshooting-guide)**
 
 ## Learning Objectives
 
