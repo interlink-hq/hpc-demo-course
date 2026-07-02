@@ -15,15 +15,12 @@ Kubernetes pods scheduled to the virtual node will be automatically offloaded to
 hpc-course/
 ├── README.md                              # This file (start here)
 ├── docs/
-│   ├── FINAL-SETUP-GUIDE.md              # ✅ CURRENT WORKING SETUP (start here!)
 │   ├── PHASES/                           # Phase-by-phase learning path
 │   │   ├── phase1-slurm-setup.md         # Detailed SLURM installation
 │   │   ├── phase2-k3s-setup.md           # Detailed k3s installation
 │   │   ├── phase3-interlink-setup.md     # Detailed Interlink setup
 │   │   └── phase4-test-offload.md        # Detailed testing procedures
 ```
-
-**➡️ Start here:** [`docs/FINAL-SETUP-GUIDE.md`](docs/FINAL-SETUP-GUIDE.md)
 
 ## Architecture Overview
 
@@ -115,50 +112,10 @@ curl http://192.168.2.122:3000/  # From Machine 78 (after setup)
 - Monitors job status via squeue
 - Reports back to Interlink API
 
-## Testing Your Setup
-
-After completing deployment, test with:
-
-```bash
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-# Submit test pod targeting interlink-node
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Pod
-metadata:
-  name: hello-slurm
-spec:
-  nodeName: interlink-node
-  containers:
-  - name: app
-    image: busybox:latest
-    command: ["/bin/sh", "-c"]
-    args: ["echo 'Hello from SLURM!'; sleep 5"]
-  restartPolicy: Never
-EOF
-
-# Watch pod status
-kubectl get pod hello-slurm -w
-
-# Check logs
-kubectl logs hello-slurm
-
-# Check SLURM job on Machine 122
-ssh rocky@192.168.2.122 '/home/rocky/slurm-demo/bin/squeue'
-```
-
-**Expected Output:**
-- Pod shows as Running/Completed on interlink-node
-- Output: "Hello from SLURM!" 
-- SLURM job visible in queue
-- Job output file created at `/home/rocky/slurm-*.out`
-
-## Troubleshooting Quick Reference
-
 ### Verify Services are Running
 
 **Machine 122 - SLURM:**
+
 ```bash
 ssh rocky@192.168.2.122
 /home/rocky/slurm-demo/bin/sinfo
@@ -166,6 +123,7 @@ ssh rocky@192.168.2.122
 ```
 
 **Machine 122 - Interlink:**
+
 ```bash
 ssh rocky@192.168.2.122
 ps aux | grep -E 'interlink-api|slurm-plugin'
@@ -174,6 +132,7 @@ curl -I http://localhost:3000/
 ```
 
 **Machine 78 - VirtualKubelet:**
+
 ```bash
 ssh rocky@192.168.2.78
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
